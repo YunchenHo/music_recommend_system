@@ -1,6 +1,5 @@
-def main():
-    print("Hello from music-recommend-system!")
+from pipeline.run_all import main
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

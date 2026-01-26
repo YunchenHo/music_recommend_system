@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+
+# Data artifacts
+/data/
+/artifacts/
+/reports/
+/datasets.zip
+/_tmp_dataset/
+*.parquet
+
+# Jupyter
+.ipynb_checkpoints/
