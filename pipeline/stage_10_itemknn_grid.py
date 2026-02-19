@@ -36,12 +36,16 @@ def main() -> int:
         type=Path,
         default=paths.processed / "complete_members_small.csv",
     )
-    parser.add_argument("--item-k-list", type=str, default="5,25,50,75,100")
-    parser.add_argument("--sim-thresholds", type=str, default="0.0,0.01,0.02,0.05")
+    # 預設只跑你在 notebook 找到的最佳組合：
+    # Item_K = 5, aggregation = baseline, sim_threshold = 0.00
+    parser.add_argument("--item-k-list", type=str, default="5")
+    parser.add_argument("--sim-thresholds", type=str, default="0.0")
     parser.add_argument(
         "--agg-list",
         type=str,
-        default="baseline,sim2,normalize_seed,pop_pow,pop_log",
+        # 若需要再次做完整 grid search，可在 CLI 覆寫成
+        # "baseline,sim2,normalize_seed,pop_pow,pop_log"
+        default="baseline",
     )
     parser.add_argument("--reco-n", type=int, default=20)
     parser.add_argument("--eval-ks", type=str, default="10,20")
