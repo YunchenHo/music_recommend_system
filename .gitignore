@@ -5,13 +5,22 @@ __pycache__/
 *.pyd
 .venv/
 
-# Data artifacts
-/data/
-/artifacts/
-/reports/
-/datasets.zip
-/_tmp_dataset/
+# Data artifacts 
+**/data/
+**/artifacts/
+recommender/data/
+recommender/artifacts/
+reports/
+datasets.zip
+_tmp_dataset/
 *.parquet
+*.pkl
+*.csv
+*.zip
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Environment and Frontend
+.env
+node_modules/

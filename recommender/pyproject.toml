@@ -19,6 +19,11 @@ dependencies = [
     "tqdm>=4.67.1",
 ]
 
+[tool.uv.workspace]
+members = [
+    "backend",
+]
+
 [project.optional-dependencies]
 metal = [
     "tensorflow-metal==1.1.*",

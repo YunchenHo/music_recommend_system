@@ -1,3 +1,43 @@
+## 🛠️ 步驟零：必備軟體安裝 (基礎環境要求)
+
+1. **Git** (版本控制工具)
+   * 用來把 GitHub 上的程式碼同步下來。
+   * 下載連結：[Git 官方網站](https://git-scm.com/downloads) (預設設定一直按下一步安裝即可)
+2. **Docker Desktop** (容器化引擎)
+   * 這是整個專案的核心！它會自動幫你建置所有需要的 Python, Node.js 與資料庫環境，完全不用自己手動裝。
+   * 下載連結：[Docker 官方網站](https://www.docker.com/products/docker-desktop/)
+   * ⚠️ **Windows 用戶注意**：安裝後請務必打開 Docker Desktop 應用程式，等待左下角顯示綠色的 `Engine running` 才算啟動成功。如果遇到卡死或報錯，請嘗試在終端機輸入 `wsl --shutdown` 或直接重新開機，真的都不行再輸入`wsl --update`然後重開 Docker Desktop。
+
+---
+
+## 🚀 步驟一：環境變數設定 (拿取資料庫鑰匙)
+
+為了資安考量，我們不會把含有真實密碼的環境變數檔上傳到 GitHub。請依照以下步驟設定你的本地環境：
+
+1. 在專案的最外層目錄（跟 `docker-compose.yml` 同一層），手動新增一個檔案，並精準命名為 **`.env`** (注意最前面有一個小數點，且沒有副檔名)。
+2. 將群組裡的內容全部複製，貼上到你剛建立的 `.env` 檔案中並存檔即可！
+
+---
+
+## 🏗️ 步驟二：一鍵建置全端系統
+
+1. 在 VS Code 打開終端機 (Terminal)。
+2. 確認 Docker Desktop 正在背景執行（亮綠燈）。
+3. 輸入以下指令，讓 Docker 幫我們把四個容器蓋起來：
+```bash
+docker compose up -d --build
+```
+(第一次執行需要下載各種環境映像檔與套件，可能需要 3~5 分鐘，請耐心等候)
+
+4. 跑完後，輸入以下指令確認容器狀態：
+```bash
+docker ps
+```
+如果有看到 4 個容器（music_react, music_django, music_mysql, music_recommender）都在運作，代表系統架構建置完畢啦！
+
+到這邊如果都順利就算完成建置 docker 環境了~
+下面的內容是之前的，想說先留著
+
 # 音樂推薦系統
 
 ## 環境初始化
