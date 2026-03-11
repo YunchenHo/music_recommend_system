@@ -121,11 +121,11 @@ Wikidata 相關流程很慢且容易被限流，目前已移到 `legacy/`，不�
 ```bash
 uv run python -m pipeline.stage_09_itemknn_baseline --item-k 5 --reco-n 20 --auto-fallback
 uv run python -m pipeline.stage_10_itemknn_grid --plot --use-all-targets
-uv run python -m pipeline.stage_11_mf_train --epochs 5
-uv run python -m pipeline.stage_12_mf_faiss_eval
+uv run python -m pipeline.stage_11_mf_train --epochs 5  # 在 Colab 執行，輸出 mf_model.h5
+uv run python -m pipeline.stage_12_mf_faiss_eval        # 讀取 mf_model.h5
 uv run python -m pipeline.stage_13_popularity_baseline
 ```
-（第一次跑 MF 會初始化 TensorFlow，可能會比較久）
+（MF 訓練目前改在 Colab 進行；其餘流程可在本機執行。）
 
 > 若 ItemKNN 出現 `LOO split is empty`，代表正例太少。  
 > 請用完整 train_encoded（不要 Top-K 篩選）重建：  
@@ -143,7 +143,7 @@ uv run python -m pipeline.stage_04_preprocess_train --top-k 5000
 uv run python -m pipeline.stage_04b_train_encode_lowram --chunksize 2000000
 uv run python -m pipeline.stage_09_itemknn_baseline --item-k 5 --reco-n 20
 uv run python -m pipeline.stage_10_itemknn_grid --plot
-uv run python -m pipeline.stage_11_mf_train --epochs 5
+uv run python -m pipeline.stage_11_mf_train --epochs 5  # 在 Colab 執行
 uv run python -m pipeline.stage_12_mf_faiss_eval
 uv run python -m pipeline.stage_13_popularity_baseline
 ```
