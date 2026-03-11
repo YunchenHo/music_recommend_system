@@ -276,7 +276,8 @@ def evaluate_loou(
             neigh_items,
             neigh_sims,
             top_n=reco_n,
-            aggregation="normalize_seed",
+            # 與 stage_10 grid search 最佳組合一致：aggregation = "baseline"
+            aggregation="baseline",
             sim_threshold=0.0,
         )
 
