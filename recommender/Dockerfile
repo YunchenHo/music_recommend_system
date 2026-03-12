@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM python:3.12-slim
 
 # 系統設定 (不寫 pyc 檔、不緩衝輸出)
 ENV PYTHONDONTWRITEBYTECODE=1
