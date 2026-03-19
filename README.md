@@ -35,8 +35,33 @@ docker ps
 ```
 如果有看到 4 個容器（music_react, music_django, music_mysql, music_recommender）都在運作，代表系統架構建置完畢啦！
 
-到這邊如果都順利就算完成建置 docker 環境了~
-下面的內容是之前的，想說先留著
+---
+
+## 🗄️ 步驟三：資料庫初始化 (Database Migration)
+
+Docker 容器跑起來後，需要執行 migration 來建立資料庫的 table：
+```bash
+docker compose up -d
+```
+
+```bash
+docker compose exec backend uv run python manage.py migrate
+```
+
+- 第一行：安裝後端 Python 依賴（因為 volume mount 的關係，容器啟動後需要執行一次）
+- 第二行：根據 Django migration 檔案建立所有資料表
+
+### ⚠️ 之後有人新增或修改資料表時
+
+當你 pull 下來發現有新的 migration 檔案（在 `backend/*/migrations/` 底下），只需要再跑一次：
+
+```bash
+docker compose exec backend uv run python manage.py migrate
+```
+
+就會自動把新的 table 建好或更新現有的 table。
+
+---
 
 # 音樂推薦系統
 
