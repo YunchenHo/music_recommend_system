@@ -1,0 +1,124 @@
+* {
+  box-sizing: border-box;
+}
+
+.login-page {
+  min-height: 100vh;
+  background-color: #f7f7f7;
+
+  display: flex;
+  flex-direction: column;   /* ⭐ 改這個 */
+  justify-content: center;
+  align-items: center;
+
+  padding: 24px;
+}
+
+.login-header {
+  width: 100%;
+  max-width: 760px;   /* ⭐ 加這行 */
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.login-logo {
+  text-align: center;
+  margin: 0;
+  font-size: 42px;
+  font-weight: 500;
+  color: #222;
+}
+
+.logo-mark {
+  color: #d84c4c;
+  font-size: 28px;
+}
+
+.login-container {
+  width: 100%;
+  max-width: 760px;
+  min-height: 520px;
+  background-color: #fff;
+  border: 2px solid #7f7f7f;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 36px 24px 64px;
+}
+
+.login-icon {
+  align-self: flex-start;
+  font-size: 24px;
+  margin-bottom: 48px;
+}
+
+.login-title {
+  margin: 0 0 40px 0;
+  font-size: 42px;
+  font-weight: 400;
+  color: #222;
+  text-align: center;
+}
+
+.google-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 2px solid #333;
+  background-color: #fff;
+  padding: 14px 24px;
+  font-size: 24px;
+  cursor: pointer;
+  margin-bottom: 24px;
+}
+
+.google-button:hover {
+  background-color: #f2f2f2;
+}
+
+.google-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #333;
+  border-radius: 50%;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.login-hint {
+  margin: 0;
+  font-size: 20px;
+  color: #333;
+  text-align: center;
+}
+
+.login-footer {
+  border-top: 2px solid #d84c4c;
+  padding: 18px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.other-button {
+  border: 2px solid #d84c4c;
+  background-color: #fff;
+  color: #d84c4c;
+  border-radius: 999px;
+  padding: 10px 28px;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.other-button:hover {
+  background-color: #fff3f3;
+}
