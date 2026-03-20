@@ -5,14 +5,22 @@
 .login-page {
   width: 100%; 
   min-height: 100vh;
-  background-color: #fffcd6;
-
+  /*background-color: #fffcd6;*/
+  background: linear-gradient(270deg, #fffcd6, #b4e7ff, #fffcd6);
+  background-size: 400% 400%;
+  animation: bgMove 8s ease infinite;
   display: flex;
   flex-direction: column;   /* ⭐ 改這個 */
   justify-content: center;
   align-items: center;
 
   padding: 24px;
+}
+
+@keyframes bgMove {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 .login-header {
@@ -34,9 +42,26 @@
   color: #97003f;
 }
 
-.logo-mark {
-  color: #d84c4c;
-  font-size: 28px;
+.login-logo span {
+  display: inline-block;
+  transition: transform 0.25s ease;
+}
+
+.login-logo span:hover {
+  transform: translateY(-10px)scale(1.08);
+  text-shadow: 0 0 10px rgba(255, 120, 150, 0.6);
+}
+
+.logo-image {
+  width: 60px;
+  height:60px;
+  object-fit: contain;
+  margin-left: 8px;
+  transition: transform 0.25s ease;
+}
+
+.logo-image:hover {
+  transform: translateY(-10px)scale(1.50);
 }
 
 .login-container {
@@ -51,6 +76,22 @@
   align-items: center;
   padding-top: 60px; /*控制container中的上下位置*/
   border-radius:24px;  /* 四個角圓弧 */
+  animation: fadeInUp 0.6s ease;
+
+  position: relative;  
+  overflow: hidden;
+
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .login-card {
@@ -71,16 +112,46 @@
   margin: 0 0 40px 0;
   font-size: 42px;
   font-weight: 400;
-  color: #222;
+  color: #67002b;
   text-align: center;
-  font-family:  'Pacifico', cursive;
+  font-family: 'jf open 粉圓', 'Noto Sans TC', sans-serif;
+  /*font-family:  'Pacifico', cursive;*/
 }
+
+.login-title span {
+  display: inline-block;
+}
+
+.login-title:hover span {
+  animation: wave 0.5s ease;
+}
+
+@keyframes wave {
+  0%   { transform: translateY(0); }
+  30%  { transform: translateY(-10px); }
+  60%  { transform: translateY(4px); }
+  100% { transform: translateY(0); }
+}
+
+.login-title:hover span:nth-child(1)  { animation-delay: 0s; }
+.login-title:hover span:nth-child(2)  { animation-delay: 0.05s; }
+.login-title:hover span:nth-child(3)  { animation-delay: 0.1s; }
+.login-title:hover span:nth-child(4)  { animation-delay: 0.15s; }
+.login-title:hover span:nth-child(5)  { animation-delay: 0.2s; }
+.login-title:hover span:nth-child(6)  { animation-delay: 0.25s; }
+.login-title:hover span:nth-child(7)  { animation-delay: 0.3s; }
+.login-title:hover span:nth-child(8)  { animation-delay: 0.35s; }
+.login-title:hover span:nth-child(9)  { animation-delay: 0.4s; }
+.login-title:hover span:nth-child(10) { animation-delay: 0.45s; }
+.login-title:hover span:nth-child(11) { animation-delay: 0.5s; }
+.login-title:hover span:nth-child(12) { animation-delay: 0.55s; }
+.login-title:hover span:nth-child(13) { animation-delay: 0.6s; }
 
 .google-button {
   display: flex;
   align-items: center;
   gap: 12px;
-  border: 2px solid #333;
+  border: 4px solid #ffa7d2;
   background-color: #fff;
   padding: 14px 24px;
   font-size: 24px;
@@ -88,50 +159,68 @@
   margin-bottom: 24px;
   font-family: 'Changa One', sans-serif;
   font-weight: 700;
+  color: #333;
+  transition: all 0.3s ease;
 }
 
 .google-button:hover {
-  background-color: #f2f2f2;
+  background-color: #ffd1d1;
+  color: #9f0746;
+  border: 4px solid #ffd1d1;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  transform: scale(1.05); 
 }
 
-.google-circle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.google-icon {
   width: 28px;
   height: 28px;
-  border: 1px solid #333;
-  border-radius: 50%;
-  font-size: 18px;
-  font-weight: bold;
 }
 
 .login-hint {
   margin: 0;
   font-size: 20px;
-  color: #333;
+  color: #67002b;
   text-align: center;
-  font-family: 'Changa One', sans-serif;
+  font-family: 'jf open 粉圓', 'Noto Sans TC', sans-serif;
+  /*font-family: 'Changa One', sans-serif;*/
   font-weight:500;
 }
-
+/*
 .login-footer {
-  /*border-top: 2px solid #d84c4c;*/
+  margin-top: auto;
   padding: 18px 0;
   display: flex;
   justify-content: center;
+  align-items: flex-end;
+  padding-bottom: 0px;
 }
 
-.other-button {
-  border: 2px solid #d84c4c;
-  background-color: #fff;
-  color: #d84c4c;
-  border-radius: 999px;
-  padding: 10px 28px;
-  font-size: 22px;
-  cursor: pointer;
+.footer-rabbit {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  image-rendering: pixelated; /* 像素風更清楚 
+} */
+
+.login-footer {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+
+  width: 100%;
+  pointer-events: none; /* 如果只是裝飾可以加這個 */
 }
 
-.other-button:hover {
-  background-color: #fff3f3;
+.footer-rabbit {
+  width: 140px;   /* 想放大就改這裡 */
+  height: auto;   /* ⭐ 建議用 auto，不要硬鎖死 */
+  object-fit: contain;
+  image-rendering: pixelated;
+  display: block;
 }
+

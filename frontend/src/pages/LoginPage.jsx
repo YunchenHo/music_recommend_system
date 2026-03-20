@@ -1,6 +1,10 @@
 import { useNavigate } from "react-router-dom"
 import "../styles/LoginPage.css"
 
+import { useEffect, useState } from "react"
+
+
+
 function LoginPage() {
   const navigate = useNavigate()
 
@@ -8,11 +12,40 @@ function LoginPage() {
     navigate("/register")
   }
 
+  const rabbitFrames = [
+    "/rabbit-1.png",
+    "/rabbit-2.png",
+    "/rabbit-3.png",
+    "/rabbit-4.png",
+    "/rabbit-5.png",
+    "/rabbit-6.png",
+  ]
+
+  const [currentFrame, setCurrentFrame] = useState(0)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentFrame((prev) => (prev + 1) % rabbitFrames.length)
+    }, 280)
+
+    return () => clearInterval(interval)
+  }, [])
+
   return (
     <div className="login-page">
       <header className="login-header">
         <h1 className="login-logo">
-          MeTube <span className="logo-mark">◡̈</span>
+          <span>M</span>
+          <span>e</span>
+          <span>T</span>
+          <span>u</span>
+          <span>b</span>
+          <span>e</span>  
+          <img
+            src="/yeah-rabbit.svg"
+            alt="MeTube rabbit mascot"
+            className="logo-image"
+          />
         </h1>
       </header>
 
@@ -20,17 +53,39 @@ function LoginPage() {
         <div className="login-card">
           {/*<div className="login-icon">🎵</div>*/}
 
-          <h2 className="login-title">Me too! 歡迎回來！</h2>
+          <h2 className="login-title">
+            <span>M</span>
+            <span>e</span>
+            <span> </span>
+            <span>t</span>
+            <span>o</span>
+            <span>o</span>
+            <span>!</span>
+            <span> </span>
+            <span>歡</span>
+            <span>迎</span>
+            <span>回</span>
+            <span>來</span>
+            <span>！</span>
+          </h2>
 
           <button className="google-button" onClick={handleGoogleLogin}>
             Continue with Google
-            <span className="google-circle">G</span>
+            <img
+              src="/google-logo.svg"
+              alt="Google logo"
+              className="google-icon"
+            />
           </button>
 
           <p className="login-hint">本平台僅用 Google 帳號登入！</p>
         </div>
         <div className="login-footer">    
-          {/*這邊放插圖等等: <button className="other-button">其他</button>*/}
+            <img
+              src={rabbitFrames[currentFrame]}
+              alt="rabbit animation"
+              className="footer-rabbit"
+            />
         </div>
 
 
