@@ -18,7 +18,7 @@ function LoginPage() {
 
       <main className="login-container">
         <div className="login-card">
-          <div className="login-icon">🎵</div>
+          {/*<div className="login-icon">🎵</div>*/}
 
           <h2 className="login-title">Me too! 歡迎回來！</h2>
 
@@ -29,10 +29,11 @@ function LoginPage() {
 
           <p className="login-hint">本平台僅用 Google 帳號登入！</p>
         </div>
-
-        <div className="login-footer">
-          <button className="other-button">其他</button>
+        <div className="login-footer">    
+          {/*這邊放插圖等等: <button className="other-button">其他</button>*/}
         </div>
+
+
       </main>
     </div>
   )
