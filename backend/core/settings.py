@@ -124,3 +124,5 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 AUTH_USER_MODEL = 'users.User'
+
+GOOGLE_CLIENT_ID = "294550145072-n13kla2nri1hc3k3vfjel9je6rqs3l3b.apps.googleusercontent.com"
