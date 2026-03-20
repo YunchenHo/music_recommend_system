@@ -44,12 +44,13 @@
   max-width: 480px;
   min-height: 520px;
   background-color: #fee2ef;
-  border: 2px solid #7f7f7f;
+  border: 10px solid #ff7789;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   align-items: center;
   padding-top: 60px; /*控制container中的上下位置*/
+  border-radius:24px;  /* 四個角圓弧 */
 }
 
 .login-card {
@@ -72,6 +73,7 @@
   font-weight: 400;
   color: #222;
   text-align: center;
+  font-family:  'Pacifico', cursive;
 }
 
 .google-button {
@@ -84,6 +86,8 @@
   font-size: 24px;
   cursor: pointer;
   margin-bottom: 24px;
+  font-family: 'Changa One', sans-serif;
+  font-weight: 700;
 }
 
 .google-button:hover {
@@ -107,6 +111,8 @@
   font-size: 20px;
   color: #333;
   text-align: center;
+  font-family: 'Changa One', sans-serif;
+  font-weight:500;
 }
 
 .login-footer {
