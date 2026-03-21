@@ -70,6 +70,10 @@ function RegisterPage() {
       return { field: "otherLanguage", message: "請填寫其他偏好語言" }
     }
 
+    if (languages.includes("其他") && !/^[\u4e00-\u9fa5]+$/.test(trimmedOtherLanguage)) {
+      return { field: "otherLanguage", message: "請輸入中文" }
+    }
+
     return null
   }
 

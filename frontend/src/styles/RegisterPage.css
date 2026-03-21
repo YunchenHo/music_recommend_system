@@ -57,14 +57,14 @@
 .register-container {
   width: 100%;
   display: flex;
-  justify-content: center;
   align-items: flex-start;
+  justify-content: center;
 }
 
 .register-card {
   width: 100%;
-  max-width: 860px;
-  min-height: 620px;
+  max-width: 800px;
+  min-height: 600px;
   padding: 48px 52px;
   background-color: #fee2ef;
   border: 8px solid #ff7789;
@@ -72,10 +72,13 @@
   box-shadow: 0 18px 40px rgba(179, 86, 112, 0.18);
   box-sizing: border-box;
   animation: fadeInUp 0.7s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center; 
 }
 
 .register-title {
-  margin: 0 0 40px 0;
+  margin: 0 0 60px 0;
   font-size: 42px;
   font-weight: 400;
   color: #67002b;
@@ -112,18 +115,20 @@
 
 .form-row {
   display: flex;
-  align-items: flex-start;
   gap: 22px;
+  width: 100%;
+  max-width: 600px;
+  align-items: center;
 }
 
 .form-label {
-  width: 150px;
-  min-width: 150px;
+  width: 140px;
+  min-width: 140px;
   margin: 10px 0 0;
   font-size: 1.2rem;
   font-weight: 700;
   color: #2b1c23;
-  line-height: 1.5;
+  line-height: 2;
 }
 
 .input-area {
@@ -344,6 +349,7 @@
   .form-row {
     flex-direction: column;
     gap: 10px;
+    align-items: flex-start;
   }
 
   .form-label {
