@@ -61,7 +61,7 @@ function LoginPage() {
             <span>o</span>
             <span>o</span>
             <span>!</span>
-            <span>&nbsp;</span>c
+            <span>&nbsp;</span>
             <span>歡</span>
             <span>迎</span>
             <span>回</span>
