@@ -56,12 +56,12 @@ function LoginPage() {
           <h2 className="login-title">
             <span>M</span>
             <span>e</span>
-            <span> </span>
+            <span>&nbsp;</span>
             <span>t</span>
             <span>o</span>
             <span>o</span>
             <span>!</span>
-            <span> </span>
+            <span>&nbsp;</span>c
             <span>歡</span>
             <span>迎</span>
             <span>回</span>
