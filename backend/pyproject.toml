@@ -10,4 +10,5 @@ dependencies = [
     "google-auth>=2.49.1",
     "mysqlclient>=2.2.8",
     "requests>=2.32.5",
+    "django-cors-headers>=4.0",
 ]

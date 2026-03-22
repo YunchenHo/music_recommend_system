@@ -38,10 +38,13 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    'corsheaders', 
+    'rest_framework', 
     'users',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware', 
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -50,6 +53,13 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# Session 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+}
 
 ROOT_URLCONF = "core.urls"
 
@@ -126,3 +136,19 @@ STATIC_URL = "static/"
 AUTH_USER_MODEL = 'users.User'
 
 GOOGLE_CLIENT_ID = "294550145072-n13kla2nri1hc3k3vfjel9je6rqs3l3b.apps.googleusercontent.com"
+
+# Session Settings
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'  
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 7                 
+SESSION_COOKIE_HTTPONLY = True                            
+SESSION_COOKIE_SAMESITE = 'Lax'                          
+
+# port
+CORS_ALLOW_CREDENTIALS = True         
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",        
+]
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+]
+
