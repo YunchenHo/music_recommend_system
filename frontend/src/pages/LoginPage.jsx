@@ -17,6 +17,30 @@ function LoginPage() {
     "/rabbit-6.png",
   ]
 
+  const handleGoogleLogin = async (idToken) => {
+  try {
+    const res = await googleLogin(idToken);
+
+    const profileCompleted = res?.data?.profile_completed;
+
+    if (profileCompleted === true || profileCompleted === 1) {
+      navigate("/home");
+    } else {
+      navigate("/register");
+    }
+  } catch (error) {
+    const err = error?.response?.data;
+
+    if (err?.code === "INVALID_GOOGLE_TOKEN") {
+      alert("Google authentication failed. Please try again.");
+    } else if (err?.code === "INVALID_DOMAIN") {
+      alert("Only NYCU school emails are allowed.");
+    } else {
+      alert(err?.message || "Login failed.");
+    }
+  }
+};
+
   const [currentFrame, setCurrentFrame] = useState(0)
 
   useEffect(() => {
@@ -65,6 +89,18 @@ function LoginPage() {
             <span>！</span>
           </h2>
 
+          <button
+            className="google-button"
+            onClick={() => handleGoogleLogin("eyJhbGciOiJSUzI1NiIsImtpZCI")}
+          >
+            Continue with Google
+            <img
+              src="/google-logo.svg"
+              alt="Google logo"
+              className="google-icon"
+            />
+          </button>
+{/*
           <button className="google-button" onClick={handleGoogleLogin}>
             Continue with Google
             <img
@@ -73,7 +109,7 @@ function LoginPage() {
               className="google-icon"
             />
           </button>
-
+*/}
           <p className="login-hint">本平台僅用 Google 帳號登入！</p>
         </div>
         <div className="login-footer">    
