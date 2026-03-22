@@ -1,7 +1,7 @@
 // src/api/api.js
 import axios from "axios"
 
-const BASE_URL = "http://localhost:5173"
+const BASE_URL = "http://localhost:8000"
 
 export function getCookie(name) {
   const value = `; ${document.cookie}`

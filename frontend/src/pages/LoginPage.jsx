@@ -1,7 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import "../styles/LoginPage.css"
 import { googleLogin } from "../api/auth";
-
 import { useEffect, useState } from "react"
 
 
@@ -19,28 +18,6 @@ function LoginPage() {
   ]
 
   const [currentFrame, setCurrentFrame] = useState(0)
-
-  const handleGoogleLogin = async (idToken) => {
-  try {
-    const res = await googleLogin(idToken);
-
-    const profileCompleted = res?.data?.profile_completed;
-
-    if (profileCompleted === true || profileCompleted === 1) {
-      navigate("/home");
-    } else {
-      navigate("/register");
-    }
-  } catch (error) {
-    console.error("login error:", error);
-
-    if (error?.code === "INVALID_GOOGLE_TOKEN") {
-      alert("Google authentication failed. Please try again.");
-    } else {
-      alert(error?.message || "Login failed.");
-    }
-  }
-};
 
   useEffect(() => {
     const interval = setInterval(() => {
