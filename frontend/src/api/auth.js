@@ -1,12 +1,14 @@
 // src/api/auth.js
-
-import { apiFetch } from "./api";
+import api from "./api"
 
 export async function googleLogin(idToken) {
-  return apiFetch("/api/auth/google-login", {
-    method: "POST",
-    body: JSON.stringify({
-      token: idToken,
-    }),
-  });
+  const { data } = await api.post("/api/auth/google-login", {
+    token: idToken,
+  })
+  return data
+}
+
+export async function registerUser(payload) {
+  const { data } = await api.post("/api/auth/register", payload)
+  return data
 }
