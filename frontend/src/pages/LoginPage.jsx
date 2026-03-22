@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import "../styles/LoginPage.css"
+import { googleLogin } from "../api/auth";
 
 import { useEffect, useState } from "react"
 
