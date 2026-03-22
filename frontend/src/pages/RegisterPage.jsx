@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import "../styles/RegisterPage.css"
+import { registerUser } from "../api/auth"
 
 function RegisterPage() {
   const navigate = useNavigate()
@@ -11,6 +12,16 @@ function RegisterPage() {
   const [languages, setLanguages] = useState([])
   const [otherLanguage, setOtherLanguage] = useState("")
   const [activeError, setActiveError] = useState(null)
+  const [submitError, setSubmitError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const languageMap = {
+    中文: "Chinese",
+    英文: "English",
+    韓文: "Korean",
+    日文: "Japanese",
+    其他: "Other",
+  }
 
   const clearActiveError = (fieldName) => {
     if (activeError?.field === fieldName) {
@@ -77,7 +88,7 @@ function RegisterPage() {
     return null
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
 
     const firstError = validateForm()
@@ -88,7 +99,36 @@ function RegisterPage() {
     }
 
     setActiveError(null)
-    navigate("/home")
+    setSubmitError("")
+    setIsSubmitting(true)
+
+    const finalLanguages = languages
+      .filter((lang) => lang !== "其他")
+      .map((lang) => languageMap[lang])
+
+    if (languages.includes("其他")) {
+      finalLanguages.push("Other")
+    }
+
+    const payload = {
+      nickname: nickname.trim(),
+      gender,
+      age,
+      languages: finalLanguages,
+    }
+
+    try {
+      await registerUser(payload)
+      navigate("/home")
+    } catch (error) {
+      setSubmitError(
+        error?.response?.data?.message ||
+        error?.response?.data?.detail ||
+        "註冊失敗，請稍後再試"
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -162,8 +202,8 @@ function RegisterPage() {
                   <input
                     type="radio"
                     name="gender"
-                    value="男"
-                    checked={gender === "男"}
+                    value="M"
+                    checked={gender === "M"}
                     onChange={(e) => {
                       setGender(e.target.value)
                       clearActiveError("gender")
@@ -176,8 +216,8 @@ function RegisterPage() {
                   <input
                     type="radio"
                     name="gender"
-                    value="女"
-                    checked={gender === "女"}
+                    value="F"
+                    checked={gender === "F"}
                     onChange={(e) => {
                       setGender(e.target.value)
                       clearActiveError("gender")
@@ -190,8 +230,8 @@ function RegisterPage() {
                   <input
                     type="radio"
                     name="gender"
-                    value="其他"
-                    checked={gender === "其他"}
+                    value="O"
+                    checked={gender === "O"}
                     onChange={(e) => {
                       setGender(e.target.value)
                       clearActiveError("gender")
@@ -306,8 +346,9 @@ function RegisterPage() {
             </div>
           </div>
 
-          <button type="submit" className="submit-button">
-            繼續
+          {submitError && <div className="error-bubble">{submitError}</div>}
+          <button type="submit" className="submit-button" disabled={isSubmitting}>
+            {isSubmitting ? "提交中..." : "繼續"}
           </button>
         </form>
       </main>
