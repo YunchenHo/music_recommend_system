@@ -13,63 +13,63 @@ export default function SongOnboardingPage() {
 
   const songData = {
     Chinese: [
-      { id: 1, title: "晴天", artist: "周杰倫", cover: "/songs-cover/song-cover.png" },
-      { id: 2, title: "小幸運", artist: "田馥甄", cover: "/songs-cover/song-cover.png" },
-      { id: 3, title: "慢冷", artist: "梁靜茹", cover: "/songs-cover/song-cover.png" },
-      { id: 4, title: "演員", artist: "薛之謙", cover: "/songs-cover/song-cover.png" },
-      { id: 5, title: "告白氣球", artist: "周杰倫", cover: "/songs-cover/song-cover.png" },
-      { id: 6, title: "我很好騙", artist: "動力火車", cover: "/songs-cover/song-cover.png" },
-      { id: 7, title: "說好的幸福呢", artist: "周杰倫", cover: "/songs-cover/song-cover.png" },
-      { id: 8, title: "年少有為", artist: "李榮浩", cover: "/songs-cover/song-cover.png" },
-      { id: 9, title: "體面", artist: "于文文", cover: "/songs-cover/song-cover.png" },
-      { id: 10, title: "追光者", artist: "岑寧兒", cover: "/songs-cover/song-cover.png" },
-      { id: 11, title: "如果可以", artist: "韋禮安", cover: "/songs-cover/song-cover.png" },
-      { id: 12, title: "倒帶", artist: "蔡依林", cover: "/songs-cover/song-cover.png" },
+      { id: 1262202, title: "晴天", artist: "周杰倫", cover: "/songs-cover/song-cover.png" },
+      { id: 1654654, title: "小幸運", artist: "田馥甄", cover: "/songs-cover/song-cover.png" },
+      { id: 904399, title: "夢醒時分", artist: "伍佰 & China Blue", cover: "/songs-cover/song-cover.png" }, 
+      { id: 551976, title: "演員", artist: "薛之謙", cover: "/songs-cover/song-cover.png" },
+      { id: 1118607, title: "告白氣球", artist: "周杰倫", cover: "/songs-cover/song-cover.png" },
+      { id: 1262259, title: "我很好騙", artist: "動力火車", cover: "/songs-cover/song-cover.png" },
+      { id: 556389, title: "說好的幸福呢", artist: "周杰倫", cover: "/songs-cover/song-cover.png" },
+      { id: 523020, title: "焚情", artist: "張信哲 ", cover: "/songs-cover/song-cover.png" },
+      { id: 1589161, title: "私奔到月球", artist: "五月天 ", cover: "/songs-cover/song-cover.png" },
+      { id: 334128, title: "夜會", artist: "王菲 ", cover: "/songs-cover/song-cover.png" },
+      { id: 1567790, title: "如果可以", artist: "韋禮安", cover: "/songs-cover/song-cover.png" },
+      { id: 803123, title: "倒帶", artist: "蔡依林", cover: "/songs-cover/song-cover.png" },
     ],
 
     English: [
-      { id: 101, title: "Shape of You", artist: "Ed Sheeran", cover: "/songs-cover/song-cover.png" },
-      { id: 102, title: "Love Story", artist: "Taylor Swift", cover: "/songs-cover/song-cover.png" },
-      { id: 103, title: "Blinding Lights", artist: "The Weeknd", cover: "/songs-cover/song-cover.png" },
-      { id: 104, title: "Photograph", artist: "Ed Sheeran", cover: "/songs-cover/song-cover.png" },
-      { id: 105, title: "Someone Like You", artist: "Adele", cover: "/songs-cover/song-cover.png" },
-      { id: 106, title: "Perfect", artist: "Ed Sheeran", cover: "/songs-cover/song-cover.png" },
-      { id: 107, title: "Thinking Out Loud", artist: "Ed Sheeran", cover: "/songs-cover/song-cover.png" },
-      { id: 108, title: "All of Me", artist: "John Legend", cover: "/songs-cover/song-cover.png" },
-      { id: 109, title: "Stay", artist: "The Kid LAROI", cover: "/songs-cover/song-cover.png" },
-      { id: 110, title: "Senorita", artist: "Shawn Mendes", cover: "/songs-cover/song-cover.png" },
-      { id: 111, title: "Bad Guy", artist: "Billie Eilish", cover: "/songs-cover/song-cover.png" },
-      { id: 112, title: "Levitating", artist: "Dua Lipa", cover: "/songs-cover/song-cover.png" },
+      { id: 689229, title: "Shape of You", artist: "Ed Sheeran", cover: "/songs-cover/song-cover.png" },
+      { id: 1919590, title: "Love Story", artist: "Taylor Swift", cover: "/songs-cover/song-cover.png" },
+      { id: 1392127, title: "Everglow", artist: "Coldplay", cover: "/songs-cover/song-cover.png" },
+      { id: 2109591, title: "Photograph", artist: "Ed Sheeran", cover: "/songs-cover/song-cover.png" },
+      { id: 1453829, title: "Someone Like You", artist: "Adele", cover: "/songs-cover/song-cover.png" },
+      { id: 13468, title: "Losers", artist: "The Weeknd", cover: "/songs-cover/song-cover.png" },
+      { id: 402252, title: "Thinking Out Loud", artist: "Ed Sheeran", cover: "/songs-cover/song-cover.png" },
+      { id: 1804300, title: "All of Me", artist: "John Legend", cover: "/songs-cover/song-cover.png" },
+      { id: 139694, title: "Do What U Want", artist: "Lady Gaga", cover: "/songs-cover/song-cover.png" },
+      { id: 50398, title: "The One That Got Away", artist: "Katy Perry", cover: "/songs-cover/song-cover.png" },
+      { id: 416909, title: "Eagle", artist: "ABBA", cover: "/songs-cover/song-cover.png" },
+      { id: 1779285, title: "Youth", artist: "Daughter", cover: "/songs-cover/song-cover.png" },
     ],
 
     Japanese: [
-      { id: 201, title: "Lemon", artist: "米津玄師", cover: "/songs-cover/song-cover.png" },
-      { id: 202, title: "Pretender", artist: "Official髭男dism", cover: "/songs-cover/song-cover.png" },
-      { id: 203, title: "夜に駆ける", artist: "YOASOBI", cover: "/songs-cover/song-cover.png" },
-      { id: 204, title: "マリーゴールド", artist: "あいみょん", cover: "/songs-cover/song-cover.png" },
-      { id: 205, title: "残響散歌", artist: "Aimer", cover: "/songs-cover/song-cover.png" },
-      { id: 206, title: "ドライフラワー", artist: "優里", cover: "/songs-cover/song-cover.png" },
-      { id: 207, title: "群青", artist: "YOASOBI", cover: "/songs-cover/song-cover.png" },
-      { id: 208, title: "なんでもないや", artist: "RADWIMPS", cover: "/songs-cover/song-cover.png" },
-      { id: 209, title: "ひまわりの約束", artist: "秦基博", cover: "/songs-cover/song-cover.png" },
-      { id: 210, title: "炎", artist: "LiSA", cover: "/songs-cover/song-cover.png" },
-      { id: 211, title: "打上花火", artist: "DAOKO × 米津玄師", cover: "/songs-cover/song-cover.png" },
-      { id: 212, title: "アイドル", artist: "YOASOBI", cover: "/songs-cover/song-cover.png" },
+      { id: 1938707, title: "うつし絵", artist: "Yui Aragaki (新垣結衣)", cover: "/songs-cover/song-cover.png" },
+      { id: 1221880	, title: "誕生日の夜", artist: "AKB48", cover: "/songs-cover/song-cover.png" },
+      { id: 1644537, title: "ブラックアウト", artist: "Tokyo Incidents", cover: "/songs-cover/song-cover.png" },
+      { id: 2155543, title: "make it happen", artist: "Namie Amuro (安室奈美恵)", cover: "/songs-cover/song-cover.png" },
+      { id: 1697710, title: "shooting star", artist: "Ai Otsuka (大塚愛)", cover: "/songs-cover/song-cover.png" },
+      { id: 422571, title: "ドライフラワー", artist: "優里", cover: "/songs-cover/song-cover.png" },
+      { id: 1502091, title: "Risky", artist: "LiSA", cover: "/songs-cover/song-cover.png" },
+      { id: 552011, title: "夏日情懷", artist: "MISIA", cover: "/songs-cover/song-cover.png" },
+      { id: 78734, title: "ひまわりの約束", artist: "秦基博", cover: "/songs-cover/song-cover.png" },
+      { id: 1073371, title: "Love in the Ice", artist: "Tohoshinki (東方神起)", cover: "/songs-cover/song-cover.png" },
+      { id: 407150, title: "胸キュン", artist: "AOA", cover: "/songs-cover/song-cover.png" },
+      { id: 925086, title: "アイドル", artist: "YOASOBI", cover: "/songs-cover/song-cover.png" },
     ],
 
     Korean: [
-      { id: 301, title: "Dynamite", artist: "BTS", cover: "/songs-cover/song-cover.png" },
-      { id: 302, title: "How You Like That", artist: "BLACKPINK", cover: "/songs-cover/song-cover.png" },
-      { id: 303, title: "Love Scenario", artist: "iKON", cover: "/songs-cover/song-cover.png" },
-      { id: 304, title: "Next Level", artist: "aespa", cover: "/songs-cover/song-cover.png" },
-      { id: 305, title: "Hype Boy", artist: "NewJeans", cover: "/songs-cover/song-cover.png" },
-      { id: 306, title: "Ditto", artist: "NewJeans", cover: "/songs-cover/song-cover.png" },
-      { id: 307, title: "Seven", artist: "Jungkook", cover: "/songs-cover/song-cover.png" },
-      { id: 308, title: "Love Dive", artist: "IVE", cover: "/songs-cover/song-cover.png" },
-      { id: 309, title: "Growl", artist: "EXO", cover: "/songs-cover/song-cover.png" },
-      { id: 310, title: "Gee", artist: "Girls' Generation", cover: "/songs-cover/song-cover.png" },
-      { id: 311, title: "Spring Day", artist: "BTS", cover: "/songs-cover/song-cover.png" },
-      { id: 312, title: "Psycho", artist: "Red Velvet", cover: "/songs-cover/song-cover.png" },
+      { id: 1867000, title: "PLAYING WITH FIRE", artist: "BLACKPINK", cover: "/songs-cover/song-cover.png" },
+      { id: 792933	, title: "Believe", artist: "SUPER JUNIOR", cover: "/songs-cover/song-cover.png" },
+      { id: 1021592, title: "Shake It", artist: "BIGBANG", cover: "/songs-cover/song-cover.png" },
+      { id: 1358918	, title: "미운오리", artist: "IU", cover: "/songs-cover/song-cover.png" },
+      { id: 1543538, title: "Very Very Very", artist: "I.O.I", cover: "/songs-cover/song-cover.png" },
+      { id: 2126048, title: "THE LEADERS", artist: "G-DRAGON", cover: "/songs-cover/song-cover.png" },
+      { id: 335663, title: "So Good", artist: "Jay Park", cover: "/songs-cover/song-cover.png" },
+      { id: 308, title: "My Romeo", artist: "Jessi", cover: "/songs-cover/song-cover.png" },
+      { id: 1217522, title: "Growl", artist: "EXO", cover: "/songs-cover/song-cover.png" },
+      { id: 488759, title: "Gee", artist: "Girls' Generation", cover: "/songs-cover/song-cover.png" },
+      { id: 2096562, title: "그렇게 하면 돼", artist: "Lena Park", cover: "/songs-cover/song-cover.png" },
+      { id: 1721221, title: "왜 나만 아프죠", artist: "IVY", cover: "/songs-cover/song-cover.png" },
     ],
   };
 
@@ -95,7 +95,7 @@ export default function SongOnboardingPage() {
         [currentLanguage]: current.filter((songId) => songId !== id),
       });
     } else {
-      if (current.length >= 4) return;
+      
       setSelectedSongs({
         ...selectedSongs,
         [currentLanguage]: [...current, id],
@@ -103,7 +103,7 @@ export default function SongOnboardingPage() {
     }
   };
 
-  const canGoNext = (selectedSongs[currentLanguage] || []).length === 4;
+  const canGoNext = (selectedSongs[currentLanguage] || []).length >= 4;
   const isLastStep = currentStep === stepKeys.length - 1;
 
   const handleNext = () => {

@@ -91,6 +91,7 @@
 
 .song-card.selected .song-card-inner {
   border-color: #ef7fbe;
+  background: #ffa3a3;
   box-shadow:
     0 0 0 6px rgba(239, 127, 190, 0.14),
     0 12px 28px rgba(239, 127, 190, 0.16);
