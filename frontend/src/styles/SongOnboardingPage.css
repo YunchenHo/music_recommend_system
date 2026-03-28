@@ -1,0 +1,94 @@
+.song-page {
+  min-height: 100vh;
+  background-color: #d8cfa3;
+  padding: 40px;
+}
+
+.song-title {
+  font-size: 48px;
+  font-weight: 400;
+  margin-bottom: 10px;
+}
+
+.song-subtitle {
+  font-size: 20px;
+  margin-bottom: 30px;
+}
+
+/* GRID */
+.song-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 30px;
+}
+
+/* 卡片 */
+.song-card {
+  background-color: #e07a7a;
+  border-radius: 25px;
+  padding: 20px;
+  cursor: pointer;
+  transition: 0.3s;
+  height: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.song-card:hover {
+  transform: scale(1.05);
+}
+
+/* 選到效果 */
+.song-card.selected {
+  border: 4px solid #6b0020;
+  background-color: #f4978e;
+}
+
+/* 假封面 */
+.song-cover {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background-color: #fff;
+  margin-bottom: 10px;
+}
+
+/* 文字 */
+.song-name {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.song-artist {
+  font-size: 14px;
+}
+
+/* 按鈕 */
+.next-button {
+  position: fixed;
+  bottom: 40px;
+  right: 40px;
+  font-size: 24px;
+  padding: 15px 40px;
+  border-radius: 40px;
+  border: none;
+  cursor: pointer;
+}
+
+/* disabled */
+.next-button.disabled {
+  background-color: #aaa;
+  color: #eee;
+  cursor: not-allowed;
+}
+
+/* active */
+.next-button.active {
+  background-color: #8b0000;
+  color: white;
+}
+
+.next-button.active:hover {
+  transform: scale(1.05);
+}
