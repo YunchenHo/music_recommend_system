@@ -4,44 +4,47 @@ import "../styles/ArtistOnboardingPage.css"
 
 const artistData = {
   Chinese: [
-    { id: 1, name: "Jay Chou", image: "/artists/jaychou.jpg" },
-    { id: 2, name: "G.E.M.", image: "/artists/jaychou.jpg" },
-    { id: 3, name: "JJ Lin", image: "/artists/jaychou.jpg" },
-    { id: 4, name: "A-Lin", image: "/artists/jaychou.jpg" },
-    { id: 5, name: "Jolin Tsai", image: "/artists/jaychou.jpg" },
-    { id: 6, name: "Eric Chou", image: "/artists/jaychou.jpg" },
-    { id: 7, name: "Mayday", image: "/artists/jaychou.jpg" },
-    { id: 8, name: "Yoga Lin", image: "/artists/jaychou.jpg" },
+    { id: 213320, name: "Jay Chou", image: "/artists/jaychou.jpg" },
+    { id: 66286, name: "G.E.M.", image: "/artists/gem.jpg" },
+    { id: 216168, name: "JJ Lin", image: "/artists/jjlin.jpg" },
+    { id: 2528, name: "A-Lin", image: "/artists/alin.jpg" },
+    { id: 218875, name: "Jolin Tsai", image: "/artists/jolin.jpg" },
+    { id: 58626, name: "Eric Chou", image: "/artists/ericchou.jpg" },
+    { id: 212101, name: "Mayday", image: "/artists/mayday.jpg" },
+    { id: 216221, name: "Yoga Lin", image: "/artists/yogalin.jpg" },
   ],
+
   English: [
-    { id: 101, name: "Taylor Swift", image: "/artists/jaychou.jpg" },
-    { id: 102, name: "Ed Sheeran", image: "/artists/jaychou.jpg" },
-    { id: 103, name: "Billie Eilish", image: "/artists/jaychou.jpg" },
-    { id: 104, name: "The Weeknd", image: "/artists/jaychou.jpg" },
-    { id: 105, name: "Ariana Grande", image: "/artists/jaychou.jpg" },
-    { id: 106, name: "Dua Lipa", image: "/artists/jaychou.jpg" },
-    { id: 107, name: "Bruno Mars", image: "/artists/jaychou.jpg" },
-    { id: 108, name: "Olivia Rodrigo", image: "/artists/jaychou.jpg" },
+    { id: 175638, name: "Taylor Swift", image: "/artists/taylorswift.jpg" },
+    { id: 54966, name: "Ed Sheeran", image: "/artists/edsheeran.jpg" },
+    { id: 21835, name: "Billie Eilish", image: "/artists/billie.jpg" },
+    { id: 186296, name: "The Weeknd", image: "/artists/theweeknd.jpg" },
+    { id: 13396, name: "Ariana Grande", image: "/artists/ariana.jpg" },
+    { id: 53286, name: "Dua Lipa", image: "/artists/dualipa.jpg" },
+    { id: 26702, name: "Bruno Mars", image: "/artists/brunomars.jpg" },
+    { id: 102703, name: "Lady Gaga", image: "/artists/ladygaga.jpg" },
   ],
+
   Japanese: [
-    { id: 201, name: "YOASOBI", image: "/artists/jaychou.jpg" },
-    { id: 202, name: "米津玄師", image: "/artists/jaychou.jpg" },
-    { id: 203, name: "Aimer", image: "/artists/jaychou.jpg" },
-    { id: 204, name: "Higedan", image: "/artists/jaychou.jpg" },
-    { id: 205, name: "LiSA", image: "/artists/jaychou.jpg" },
-    { id: 206, name: "優里", image: "/artists/jaychou.jpg" },
-    { id: 207, name: "King Gnu", image: "/artists/jaychou.jpg" },
-    { id: 208, name: "あいみょん", image: "/artists/jaychou.jpg" },
+    { id: 2998, name: "AKB48", image: "/artists/akb48.jpg" },
+    { id: 97509, name: "Kenshi Yonezu", image: "/artists/米津玄師.jpg" },
+    { id: 5684, name: "Aimer", image: "/artists/aimer.jpg" },
+    { id: 214422, name: "Higedan", image: "/artists/higedan.jpg" },
+    { id: 105936, name: "LiSA", image: "/artists/lisa.jpg" },
+    { id: 128744, name: "Namie Amuro", image: "/artists/namie.jpg" },
+    { id: 204927, name: "Yui Aragaki", image: "/artists/yui.jpg" },
+    { id: 111645, name: "Mamoru Miyano", image: "/artists/mamoru.jpg" },
   ],
+
   Korean: [
-    { id: 301, name: "BTS", image: "/artists/jaychou.jpg" },
-    { id: 302, name: "BLACKPINK", image: "/artists/jaychou.jpg" },
-    { id: 303, name: "NewJeans", image: "/artists/jaychou.jpg" },
-    { id: 304, name: "IVE", image: "/artists/jaychou.jpg" },
-    { id: 305, name: "IU", image: "/artists/jaychou.jpg" },
-    { id: 306, name: "SEVENTEEN", image: "/artists/jaychou.jpg" },
-    { id: 307, name: "aespa", image: "/artists/jaychou.jpg" },
-    { id: 308, name: "EXO", image: "/artists/jaychou.jpg" },
+    { id: 128087, name: "NCT 127", image: "/artists/nct127.jpg" },
+    { id: 16523, name: "BLACKPINK", image: "/artists/blackpink.jpg" },
+    { id: 157035, name: "SUPER JUNIOR", image: "/artists/superjunior.png" },
+    { id: 66449, name: "GFRIEND", image: "/artists/gfriend.jpg" },
+    { id: 79228, name: "IU", image: "/artists/iu.jpg" },
+    { id: 156534, name: "SEVENTEEN", image: "/artists/seventeen.jpg" },
+    { id: 69454, name: "SNSD", image: "/artists/snsd.jpg" },
+    { id: 54451, name: "EXO", image: "/artists/exo.jpg" },
   ],
 }
 
@@ -107,7 +110,7 @@ function ArtistOnboardingPage() {
 
   const handleBack = () => {
     if (currentStep === 0) {
-      navigate("/register")
+      return // 直接不做任何事
     } else {
       setCurrentStep((prev) => prev - 1)
     }
@@ -161,6 +164,7 @@ function ArtistOnboardingPage() {
             type="button"
             className="artist-back-button"
             onClick={handleBack}
+            disabled={currentStep === 0}
           >
             ← Back
           </button>

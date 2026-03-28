@@ -76,15 +76,15 @@
 
 /* 圓形尺寸（已放大） */
 .artist-avatar-wrapper {
-  width: 190px;
+  width: 200px;
   display: flex;
   justify-content: center;
 }
 
 .artist-avatar-ring {
   position: relative;
-  width: 170px;
-  height: 170px;
+  width: 180px;
+  height: 180px;
   border: 3px solid #efb1dc;
   border-radius: 50%;
   overflow: hidden;
