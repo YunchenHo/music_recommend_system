@@ -119,7 +119,7 @@ function RegisterPage() {
 
     try {
       await registerUser(payload)
-      navigate("/song-onboarding", {
+      navigate("/artist-onboarding", {
         state: {
           selectedLanguages: finalLanguages,
         },
