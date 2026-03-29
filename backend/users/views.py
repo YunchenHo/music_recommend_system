@@ -15,7 +15,7 @@ from django.views.decorators.http import require_http_methods
 from google.oauth2 import id_token
 from google.auth.transport import requests
 
-from .models import User
+from .models import User, Artist, Song, UserOnboardingArtist, UserOnboardingSong
 
 @method_decorator(csrf_exempt, name='dispatch')
 @method_decorator(ensure_csrf_cookie, name='dispatch')
@@ -152,6 +152,7 @@ class RegisterProfileView(APIView):
             "message": "Registration complete.",
             }, status=status.HTTP_200_OK)
 
+
 class AuthMeView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -163,4 +164,112 @@ class AuthMeView(APIView):
                 "username": user.nickname,
                 "profile_picture": user.profile_picture,
             },
+        }, status=status.HTTP_200_OK)
+
+class OnboardingArtistsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        languages = request.query_params.get('languages', '')
+        if not languages:
+            return Response({
+                "status": "error",
+                "message": "Please provide languages parameter.",
+                "code": "MISSING_LANGUAGES",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        language_list = [lang.strip() for lang in languages.split(',') if lang.strip()]
+        artists = Artist.objects.filter(language__in=language_list).values(
+            'id', 'artist_name', 'artist_image', 'language'
+        )
+
+        return Response({
+            "status": "success",
+            "data": list(artists),
+        }, status=status.HTTP_200_OK)
+
+class OnboardingSongsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        languages = request.query_params.get('languages', '')
+        if not languages:
+            return Response({
+                "status": "error",
+                "message": "Please provide languages parameter.",
+                "code": "MISSING_LANGUAGES",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        language_list = [lang.strip() for lang in languages.split(',') if lang.strip()]
+        songs = Song.objects.filter(language__in=language_list).select_related('artist')
+
+        data = [
+            {
+                "id": song.id,
+                "song_title": song.song_title,
+                "artist_name": song.artist.artist_name,
+                "song_image": song.song_image,
+                "language": song.language,
+            }
+            for song in songs
+        ]
+
+        return Response({
+            "status": "success",
+            "data": data,
+        }, status=status.HTTP_200_OK)
+
+class OnboardingSubmitView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        artist_ids = request.data.get('artist_ids', [])
+        song_ids = request.data.get('song_ids', [])
+
+        if not isinstance(artist_ids, list) or len(artist_ids) == 0:
+            return Response({
+                "status": "error",
+                "message": "Please select at least one artist.",
+                "code": "INVALID_ARTISTS",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if not isinstance(song_ids, list) or len(song_ids) == 0:
+            return Response({
+                "status": "error",
+                "message": "Please select at least one song.",
+                "code": "INVALID_SONGS",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        existing_artists = Artist.objects.filter(id__in=artist_ids)
+        if existing_artists.count() != len(set(artist_ids)):
+            return Response({
+                "status": "error",
+                "message": "Some artist IDs are invalid.",
+                "code": "INVALID_ARTIST_IDS",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        existing_songs = Song.objects.filter(id__in=song_ids)
+        if existing_songs.count() != len(set(song_ids)):
+            return Response({
+                "status": "error",
+                "message": "Some song IDs are invalid.",
+                "code": "INVALID_SONG_IDS",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        UserOnboardingArtist.objects.filter(user=user).delete()
+        UserOnboardingSong.objects.filter(user=user).delete()
+
+        UserOnboardingArtist.objects.bulk_create([
+            UserOnboardingArtist(user=user, artist=artist)
+            for artist in existing_artists
+        ])
+        UserOnboardingSong.objects.bulk_create([
+            UserOnboardingSong(user=user, song=song)
+            for song in existing_songs
+        ])
+
+        return Response({
+            "status": "success",
+            "message": "Onboarding complete.",
         }, status=status.HTTP_200_OK)
