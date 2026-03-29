@@ -110,9 +110,17 @@ export default function SongOnboardingPage() {
 const handleNext = async () => {
   if (!canGoNext) return;
 
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) {
+      return parts.pop().split(";").shift();
+    }
+    return null;
+  }
+
   if (isLastStep) {
     try {
-      // 整理資料
       const allArtistIds = Array.isArray(selectedArtists)
         ? selectedArtists
         : Object.values(selectedArtists).flat();
@@ -124,19 +132,29 @@ const handleNext = async () => {
         song_ids: allSongIds,
       });
 
-      // 🔥 重點：打 API
-      await axios.post("/api/profile/onboarding", {
-        artist_ids: allArtistIds,
-        song_ids: allSongIds,
-      });
+      const csrfToken = getCookie("csrftoken");
 
-      // 成功後跳轉
+      await axios.post(
+        "http://localhost:8000/api/onboarding/submit",
+        {
+          artist_ids: allArtistIds,
+          song_ids: allSongIds,
+        },
+        {
+          withCredentials: true,
+          headers: {
+            "X-CSRFToken": csrfToken,
+          },
+        }
+      );
+
       navigate("/home");
     } catch (error) {
       console.error("API 錯誤:", error);
     }
-  } else {
-    setCurrentStep((prev) => prev + 1);
+  }
+  else {
+      setCurrentStep((prev) => prev + 1);
   }
 };
 
