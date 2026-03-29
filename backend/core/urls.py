@@ -20,7 +20,6 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
-    # 把 api/ 路徑交給 users App 的 urls.py 處理
-    path('api/auth/', include('users.urls')), 
+    path('api/auth/', include('users.urls')),
+    path('api/onboarding/', include('users.onboarding_urls')),
 ]
