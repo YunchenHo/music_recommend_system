@@ -1,0 +1,210 @@
+.artist-page {
+  min-height: 100vh;
+  background: #f5eecf;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.artist-panel {
+  max-width: 1060px;
+  margin: 0 auto;
+  background: #fffdf8;
+  border: 1px solid #e6dcc5;
+  border-radius: 18px;
+  padding: 22px 22px 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.artist-step {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #8d8d8d;
+}
+
+.artist-title {
+  margin: 0;
+  font-size: 42px;
+  font-weight: 500;
+  color: #3d342f;
+  line-height: 1.25;
+}
+
+.artist-title span {
+  color: #d97cab;
+}
+
+.artist-subtitle {
+  margin-top: 12px;
+  margin-bottom: 22px;
+  font-size: 20px;
+  color: #6b625b;
+}
+
+/* GRID：左右更緊，上下更鬆 */
+.artist-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  row-gap: 32px;
+  column-gap: 6px;
+  margin-bottom: 32px;
+}
+
+/* BUTTON reset（移除黑框） */
+.artist-card {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+  box-shadow: none;
+  border-radius: 50%;
+}
+
+.artist-card:focus,
+.artist-card:focus-visible,
+.artist-card:active {
+  outline: none;
+  box-shadow: none;
+  border: none;
+}
+
+/* 圓形尺寸（已放大） */
+.artist-avatar-wrapper {
+  width: 200px;
+  display: flex;
+  justify-content: center;
+}
+
+.artist-avatar-ring {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  border: 3px solid #efb1dc;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #f8f8f8;
+
+  /* 讓波浪更融合 */
+  box-shadow: inset 0 -8px 16px rgba(255, 255, 255, 0.08);
+
+  transition: transform 0.22s ease, box-shadow 0.22s ease,
+    border-color 0.22s ease, background-color 0.22s ease;
+}
+
+.artist-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* hover：未選取時才有粉色圓形遮罩 */
+.artist-card:not(.selected):hover .artist-avatar-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(244, 178, 234, 0.18);
+  pointer-events: none;
+}
+
+/* hover 浮起 */
+.artist-card:hover .artist-avatar-ring {
+  transform: translateY(-3px);
+}
+
+/* 選取時關閉 hover 遮罩 */
+.artist-card.selected:hover .artist-avatar-ring::after {
+  content: none;
+}
+
+/* 選取效果（加大外擴） */
+.artist-card.selected .artist-avatar-ring {
+  border-color: #ef7fbe;
+  box-shadow:
+    0 0 0 10px rgba(239, 127, 190, 0.18),
+    0 12px 28px rgba(239, 127, 190, 0.18);
+}
+
+/* ⭐ 波浪區（clip-path 版本） */
+.artist-wave-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+
+  height: 64px; /* 放大 */
+  background: rgba(244, 178, 234, 0.96);
+
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 12px;
+
+  clip-path: path(
+    "M 0 32 C 18 10, 38 6, 56 20 C 76 34, 94 36, 112 20 C 130 6, 148 10, 170 26 L 170 64 L 0 64 Z"
+  );
+}
+
+/* ⭐ 名字（單行完整 + ellipsis） */
+.artist-wave-label span {
+  font-size: 13.5px;
+  font-weight: 400;
+  color: #2d1f27;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  max-width: 130px;
+  text-align: center;
+}
+
+/* 底部按鈕區 */
+.artist-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.artist-back-button,
+.artist-next-button {
+  border: none;
+  border-radius: 12px;
+  padding: 14px 22px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.artist-back-button {
+  background: #f3eee6;
+  color: #b0aaa2;
+}
+
+.artist-back-button:hover {
+  background: #ece4d7;
+}
+
+.artist-next-button.active {
+  background: linear-gradient(180deg, #ff9dcb 0%, #f47fbb 100%);
+  color: white;
+}
+
+.artist-next-button.active:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(244, 127, 187, 0.22);
+}
+
+.artist-next-button.disabled {
+  background: #efe8e2;
+  color: #c8beb6;
+  cursor: not-allowed;
+}

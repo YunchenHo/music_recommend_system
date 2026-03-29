@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import "../styles/LoginPage.css"
-import { googleLogin } from "../api/auth";
+import { googleLogin } from "../api/auth"
 import { useEffect, useState, useRef } from "react"
 
 function LoginPage() {
@@ -17,53 +17,57 @@ function LoginPage() {
     "/rabbit-6.png",
   ]
 
+  const [currentFrame, setCurrentFrame] = useState(0)
+
   const handleGoogleLogin = async (idToken) => {
     try {
-      const res = await googleLogin(idToken);
-      const profileCompleted = res?.data?.profile_completed;
+      const res = await googleLogin(idToken)
+      const profileCompleted = res?.data?.profile_completed
 
       if (profileCompleted === true || profileCompleted === 1) {
-        navigate("/home");
+        navigate("/home")
       } else {
-        navigate("/register");
+        navigate("/register")
       }
     } catch (error) {
-      const err = error?.response?.data;
+      const err = error?.response?.data
 
       if (err?.code === "INVALID_GOOGLE_TOKEN") {
-        alert("Google authentication failed. Please try again.");
+        alert("Google authentication failed. Please try again.")
       } else if (err?.code === "INVALID_DOMAIN") {
-        alert("Only NYCU school emails are allowed.");
+        alert("Only NYCU school emails are allowed.")
       } else {
-        alert(err?.message || "Login failed.");
+        alert(err?.message || "Login failed.")
       }
     }
-  };
-
-  const [currentFrame, setCurrentFrame] = useState(0)
+  }
 
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentFrame((prev) => (prev + 1) % rabbitFrames.length)
     }, 280)
+
     return () => clearInterval(interval)
-  }, [])
+  }, [rabbitFrames.length])
 
   useEffect(() => {
     const initGoogle = () => {
       if (window.google && googleBtnRef.current && !googleInitialized.current) {
         googleInitialized.current = true
+
         window.google.accounts.id.initialize({
-          client_id: "294550145072-n13kla2nri1hc3k3vfjel9je6rqs3l3b.apps.googleusercontent.com",
+          client_id:
+            "294550145072-n13kla2nri1hc3k3vfjel9je6rqs3l3b.apps.googleusercontent.com",
           callback: (response) => {
             handleGoogleLogin(response.credential)
           },
         })
+
         window.google.accounts.id.renderButton(googleBtnRef.current, {
           theme: "outline",
           size: "large",
           text: "continue_with",
-          width: 300,
+          width: 360,
         })
       }
     }
@@ -77,6 +81,7 @@ function LoginPage() {
           initGoogle()
         }
       }, 100)
+
       return () => clearInterval(timer)
     }
   }, [])
@@ -90,7 +95,7 @@ function LoginPage() {
           <span>T</span>
           <span>u</span>
           <span>b</span>
-          <span>e</span>  
+          <span>e</span>
           <img
             src="/yeah-rabbit.svg"
             alt="MeTube rabbit mascot"
@@ -117,16 +122,28 @@ function LoginPage() {
             <span>！</span>
           </h2>
 
-          <div ref={googleBtnRef} className="google-button-container"></div>
+          <div className="google-button-wrapper">
+            <button type="button" className="google-button">
+              Continue with Google
+              <img
+                src="/google-logo.svg"
+                alt="Google logo"
+                className="google-icon"
+              />
+            </button>
+
+            <div ref={googleBtnRef} className="google-button-overlay"></div>
+          </div>
 
           <p className="login-hint">本平台僅用 Google 帳號登入！</p>
         </div>
-        <div className="login-footer">    
-            <img
-              src={rabbitFrames[currentFrame]}
-              alt="rabbit animation"
-              className="footer-rabbit"
-            />
+
+        <div className="login-footer">
+          <img
+            src={rabbitFrames[currentFrame]}
+            alt="rabbit animation"
+            className="footer-rabbit"
+          />
         </div>
       </main>
     </div>

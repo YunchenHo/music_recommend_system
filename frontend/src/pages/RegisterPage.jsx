@@ -119,7 +119,11 @@ function RegisterPage() {
 
     try {
       await registerUser(payload)
-      navigate("/home")
+      navigate("/artist-onboarding", {
+        state: {
+          selectedLanguages: finalLanguages,
+        },
+      })
     } catch (error) {
       setSubmitError(
         error?.response?.data?.message ||
