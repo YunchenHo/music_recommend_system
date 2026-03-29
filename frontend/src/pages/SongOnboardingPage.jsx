@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import "../styles/SongOnboardingPage.css";
+import axios from "axios";
 
 export default function SongOnboardingPage() {
   const navigate = useNavigate();
@@ -106,16 +107,38 @@ export default function SongOnboardingPage() {
   const canGoNext = (selectedSongs[currentLanguage] || []).length >= 4;
   const isLastStep = currentStep === stepKeys.length - 1;
 
-  const handleNext = () => {
-    if (!canGoNext) return;
+const handleNext = async () => {
+  if (!canGoNext) return;
 
-    if (isLastStep) {
-      console.log("Selected songs:", selectedSongs);
+  if (isLastStep) {
+    try {
+      // 整理資料
+      const allArtistIds = Array.isArray(selectedArtists)
+        ? selectedArtists
+        : Object.values(selectedArtists).flat();
+
+      const allSongIds = Object.values(selectedSongs).flat();
+
+      console.log("送出的資料：", {
+        artist_ids: allArtistIds,
+        song_ids: allSongIds,
+      });
+
+      // 🔥 重點：打 API
+      await axios.post("/api/profile/onboarding", {
+        artist_ids: allArtistIds,
+        song_ids: allSongIds,
+      });
+
+      // 成功後跳轉
       navigate("/home");
-    } else {
-      setCurrentStep((prev) => prev + 1);
+    } catch (error) {
+      console.error("API 錯誤:", error);
     }
-  };
+  } else {
+    setCurrentStep((prev) => prev + 1);
+  }
+};
 
   const handlePrev = () => {
     if (currentStep === 0) return;
