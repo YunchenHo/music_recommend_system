@@ -9,6 +9,8 @@ from django.conf import settings
 from django.contrib.auth import login
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.utils.decorators import method_decorator
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
 
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -149,6 +151,20 @@ class RegisterProfileView(APIView):
             "status": "success",
             "message": "Registration complete.",
             }, status=status.HTTP_200_OK)
+
+
+class AuthMeView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        return Response({
+            "status": "success",
+            "data": {
+                "username": user.nickname,
+                "profile_picture": user.profile_picture,
+            },
+        }, status=status.HTTP_200_OK)
 
 class OnboardingArtistsView(APIView):
     permission_classes = [IsAuthenticated]
