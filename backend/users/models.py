@@ -51,3 +51,53 @@ class User(AbstractUser):
     def __str__(self):
         # 有暱稱秀暱稱 -> 沒暱稱秀 Google 名 -> 都沒有就秀 Email/Username
         return self.nickname or self.google_name or self.username
+
+class Artist(models.Model):
+    artist_name = models.CharField(max_length=255)
+    artist_image = models.CharField(max_length=500, null=True, blank=True)
+    language = models.CharField(max_length=50, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.artist_name
+
+
+class Song(models.Model):
+    song_title = models.CharField(max_length=255)
+    artist = models.ForeignKey(Artist, on_delete=models.CASCADE, related_name='songs')
+    album_name = models.CharField(max_length=255, blank=True, default='')
+    language = models.CharField(max_length=50, blank=True, default='')
+    song_image = models.CharField(max_length=500, null=True, blank=True) 
+    release_date = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.song_title
+
+
+class UserOnboardingArtist(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='onboarding_artists')
+    artist = models.ForeignKey(Artist, on_delete=models.CASCADE, related_name='onboarding_users')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'artist'], name='unique_user_onboarding_artist')
+        ]
+
+    def __str__(self):
+        return f"{self.user} - {self.artist}"
+
+
+class UserOnboardingSong(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='onboarding_songs')
+    song = models.ForeignKey(Song, on_delete=models.CASCADE, related_name='onboarding_users')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'song'], name='unique_user_onboarding_song')
+        ]
+
+    def __str__(self):
+        return f"{self.user} - {self.song}"
