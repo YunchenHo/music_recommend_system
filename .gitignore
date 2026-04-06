@@ -24,3 +24,4 @@ _tmp_dataset/
 # Environment and Frontend
 .env
 node_modules/
+.claude
