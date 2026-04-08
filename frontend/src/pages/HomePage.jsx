@@ -58,6 +58,10 @@ export default function HomePage() {
   // 已收藏的歌曲清單展開/收合
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false)
 
+  const [liked, setLiked] = useState(false)
+  const [disliked, setDisliked] = useState(false)
+  const [saved, setSaved] = useState(false)
+
   return (
     <div className="home-page">
 
@@ -118,18 +122,19 @@ export default function HomePage() {
           {/* 中：切換按鈕 */}
           <div className="navbar-nav">
             <button
-              className={`nav-btn ${view === "home" ? "active" : ""}`}
+              className={`nav-icon-btn ${view === "home" ? "active" : ""}`}
               onClick={() => setView("home")}
               title="首頁"
             >
-              🏠
+              <img src="/home.svg" alt="home" />
             </button>
+
             <button
-              className={`nav-btn ${view === "search" ? "active" : ""}`}
+              className={`nav-icon-btn ${view === "search" ? "active" : ""}`}
               onClick={() => setView("search")}
               title="搜尋"
             >
-              🔍
+              <img src="/search.svg" alt="search" />
             </button>
           </div>
 
@@ -176,7 +181,9 @@ export default function HomePage() {
                   type="text"
                   placeholder="搜尋歌曲、藝人..."
                 />
-                <button className="search-btn">🔍</button>
+                <button className="search-btn">
+                  <img src="/search.svg" alt="search" />
+                </button>
               </div>
               <p className="search-hint">輸入關鍵字開始搜尋</p>
             </section>
@@ -205,15 +212,52 @@ export default function HomePage() {
 
             {/* 互動按鈕 */}
             <div className="player-actions">
-              <button className="action-btn" title="喜歡">👍</button>
-              <button className="action-btn" title="不喜歡">👎</button>
-              <button className="action-btn" title="收藏至已收藏的歌曲">🔖</button>
-              <button className="action-btn add-playlist-btn" title="加入播放清單">＋</button>
+              <button
+                className={`action-btn-new ${liked ? "active" : ""}`}
+                onClick={() => {
+                  setLiked(prev => !prev)
+                  setDisliked(false)  
+                }}
+                title="喜歡"
+              >
+                <img src="/good.svg" alt="like" className="good-icon" />
+              </button>
+
+              <button
+                className={`action-btn-new ${disliked ? "active" : ""}`}
+                onClick={() => {
+                  setDisliked(prev => !prev)
+                  setLiked(false)   
+                }}
+                title="不喜歡"
+              >
+                <img src="/bad.svg" alt="dislike" className="bad-icon" />
+              </button>
+
+              <button
+                className={`action-btn-new ${saved ? "active" : ""}`}
+                onClick={() => setSaved(prev => !prev)}
+                title="收藏至已收藏的歌曲"
+              >
+                <img src="/keep.svg" alt="keep" className="keep-icon" />
+              </button>
+
+              <button
+                className="action-btn-new"
+                title="加入播放清單"
+              >
+                <img src="/add.svg" alt="add" className="add-icon" />
+              </button>
+
             </div>
 
             {/* 播放控制 */}
-            <button className="play-btn" onClick={togglePlay}>
-              {isPlaying ? "⏸" : "▶"}
+            <button className="play-btn" onClick={togglePlay} title={isPlaying ? "暫停" : "播放"}>
+              <img
+                src={isPlaying ? "/pause.svg" : "/play.svg"}
+                alt={isPlaying ? "pause" : "play"}
+                className="play-icon"
+              />
             </button>
           </div>
         )}
@@ -222,3 +266,22 @@ export default function HomePage() {
     </div>
   )
 }
+
+
+/*
+            <div className="player-actions">
+              <button className="action-btn-new" title="喜歡">
+                <img src="/good.svg" alt="like" className="good-icon" />
+              </button>
+              <button className="action-btn-new" title="不喜歡">
+                <img src="/bad.svg" alt="dislike" className="bad-icon" />
+              </button>
+              <button className="action-btn-new" title="收藏至已收藏的歌曲">
+                <img src="/keep.svg" alt="keep" className="keep-icon" />
+              </button>
+              <button className="action-btn-new" title="加入播放清單">
+                <img src="/add.svg" alt="add" className="add-icon" />
+              </button>
+            </div>
+
+            */
