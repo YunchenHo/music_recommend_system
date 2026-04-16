@@ -91,6 +91,14 @@ function RegisterPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
+    // DEBUG: 直接跳到下一頁，固定語言
+    /*navigate("/artist-onboarding", {
+      state: {
+        selectedLanguages: ["Japanese"],
+      },
+    })
+    return*/
+    
     const firstError = validateForm()
 
     if (firstError) {
