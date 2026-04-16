@@ -2,6 +2,7 @@ services:
   db:
     image: mysql:8.0
     container_name: music_mysql
+    command: --local-infile=1
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
@@ -23,8 +24,10 @@ services:
     volumes:
       - ./backend:/app  
       - /app/.venv
+      - ./recommender/artifacts:/app/recommender_artifacts:ro
     command: >
-      sh -c "uv run python manage.py migrate && uv run python manage.py runserver 0.0.0.0:8000"
+      sh -c "uv run python manage.py migrate &&
+             uv run python manage.py runserver 0.0.0.0:8000"
     
   frontend:
     build: 
