@@ -307,6 +307,40 @@ class RecommendationsView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+class SongDetailView(APIView):
+    """GET /api/songs/<song_id> — 取得單首歌曲詳細資訊（含收藏狀態）"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, song_id):
+        try:
+            song = Song.objects.get(id=song_id)
+        except Song.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Song not found.",
+                "code": "SONG_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        is_favorited = PlaylistSong.objects.filter(
+            playlist__user=request.user,
+            playlist__playlist_name=ARCHIVE_PLAYLIST_NAME,
+            song=song,
+        ).exists()
+
+        return Response({
+            "status": "success",
+            "data": {
+                "id": song.id,
+                "song_title": song.song_title,
+                "artist_name": song.artist_name,
+                "album_name": song.album_name,
+                "language": song.language,
+                "song_image": song.song_image,
+                "is_favorited": is_favorited,
+            },
+        }, status=status.HTTP_200_OK)
+
+
 class FavoritesView(APIView):
     """
     GET  /api/songs/favorites — 取得收藏歌曲列表

@@ -113,6 +113,18 @@ Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
 X-CSRFToken: {{csrftoken}}
 
 ### -------------------------------------------
-### 12. 未登入測試（不帶 cookie，應該回 403）
+### 12. 取得單首歌曲詳細資訊（含收藏狀態）
+### -------------------------------------------
+GET {{host}}/api/songs/523020
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 13. 取得不存在的歌曲（應該回 404）
+### -------------------------------------------
+GET {{host}}/api/songs/99999999
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 14. 未登入測試（不帶 cookie，應該回 403）
 ### -------------------------------------------
 GET {{host}}/api/songs/recommendations
