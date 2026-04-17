@@ -29,7 +29,7 @@ const artistData = {
     { id: 2998, name: "AKB48", image: "/artists/akb48.jpg" },
     { id: 97509, name: "Kenshi Yonezu", image: "/artists/米津玄師.jpg" },
     { id: 5684, name: "Aimer", image: "/artists/aimer.jpg" },
-    { id: 214422, name: "Higedan", image: "/artists/higedan.jpg" },
+    { id: 101256, name: "Kyary", image: "/artists/kyarypamyupamyu.jpg" },
     { id: 105936, name: "LiSA", image: "/artists/lisa.jpg" },
     { id: 128744, name: "Namie Amuro", image: "/artists/namie.jpg" },
     { id: 204927, name: "Yui Aragaki", image: "/artists/yui.jpg" },

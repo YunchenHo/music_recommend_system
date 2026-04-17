@@ -52,6 +52,7 @@ services:
     container_name: music_recommender
     volumes:
       - ./recommender:/app
+      - ./data:/app/data
     env_file:
       - .env
     tty: true
