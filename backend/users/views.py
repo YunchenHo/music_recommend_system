@@ -1,3 +1,4 @@
+import logging
 import re
 
 from rest_framework.views import APIView
@@ -15,7 +16,19 @@ from django.views.decorators.http import require_http_methods
 from google.oauth2 import id_token
 from google.auth.transport import requests
 
-from .models import User, Artist, Song, UserOnboardingArtist, UserOnboardingSong
+from . import onboarding_itemknn_store
+from .models import (
+    User,
+    Artist,
+    Song,
+    UserOnboardingArtist,
+    UserOnboardingSong,
+    UserItemKNNRawCandidate,
+    UserItemKNNRecommendation,
+)
+
+logger = logging.getLogger(__name__)
+
 
 @method_decorator(csrf_exempt, name='dispatch')
 @method_decorator(ensure_csrf_cookie, name='dispatch')
@@ -269,7 +282,132 @@ class OnboardingSubmitView(APIView):
             for song in existing_songs
         ])
 
+        try:
+            onboarding_itemknn_store.refresh_stored_itemknn_recommendations(user)
+        except FileNotFoundError as exc:
+            logger.warning("ItemKNN refresh skipped (artifact missing): %s", exc)
+        except ValueError as exc:
+            logger.warning("ItemKNN refresh skipped (invalid artifact): %s", exc)
+
         return Response({
             "status": "success",
             "message": "Onboarding complete.",
         }, status=status.HTTP_200_OK)
+
+
+class OnboardingRecommendationsView(APIView):
+    """讀取已快取之 ItemKNN 推薦（onboarding 送出時寫入）；?refresh=1 時依種子重算。回傳 song id 列表。"""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            top_n = int(request.query_params.get("top_n", 30))
+        except (TypeError, ValueError):
+            return Response(
+                {
+                    "status": "error",
+                    "message": "top_n must be an integer.",
+                    "code": "INVALID_TOP_N",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if top_n < 1 or top_n > 200:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "top_n must be between 1 and 200.",
+                    "code": "INVALID_TOP_N",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = request.user
+        seed_ids = list(
+            UserOnboardingSong.objects.filter(user=user).values_list("song_id", flat=True)
+        )
+        if not seed_ids:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "No onboarding songs yet.",
+                    "code": "NO_ONBOARDING_SONGS",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        want_refresh = request.query_params.get("refresh") in ("1", "true", "yes")
+        skipped: list[int] = []
+
+        if want_refresh:
+            try:
+                _, skipped = onboarding_itemknn_store.refresh_stored_itemknn_recommendations(
+                    user, top_n=top_n
+                )
+            except FileNotFoundError as exc:
+                return Response(
+                    {
+                        "status": "error",
+                        "message": str(exc),
+                        "code": "ITEMKNN_ARTIFACT_MISSING",
+                    },
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            except ValueError as exc:
+                return Response(
+                    {
+                        "status": "error",
+                        "message": str(exc),
+                        "code": "ITEMKNN_ARTIFACT_INVALID",
+                    },
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+        elif not UserItemKNNRecommendation.objects.filter(user=user).exists():
+            store_n = min(200, max(top_n, onboarding_itemknn_store.DEFAULT_STORE_TOP_N))
+            try:
+                _, skipped = onboarding_itemknn_store.refresh_stored_itemknn_recommendations(
+                    user, top_n=store_n
+                )
+            except FileNotFoundError as exc:
+                return Response(
+                    {
+                        "status": "error",
+                        "message": str(exc),
+                        "code": "ITEMKNN_ARTIFACT_MISSING",
+                    },
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            except ValueError as exc:
+                return Response(
+                    {
+                        "status": "error",
+                        "message": str(exc),
+                        "code": "ITEMKNN_ARTIFACT_INVALID",
+                    },
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        song_ids = list(
+            UserItemKNNRecommendation.objects.filter(user=user)
+            .order_by("position")
+            .values_list("song_id", flat=True)[:top_n]
+        )
+
+        raw_candidates = list(
+            UserItemKNNRawCandidate.objects.filter(user=user)
+            .order_by("position")
+            .values("song_id", "score", "position")
+        )
+
+        return Response(
+            {
+                "status": "success",
+                "data": {
+                    "song_ids": song_ids,
+                    "raw_candidates": raw_candidates,
+                    "skipped_seed_ids": skipped,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )

@@ -101,3 +101,57 @@ class UserOnboardingSong(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.song}"
+
+
+class UserItemKNNRecommendation(models.Model):
+    """依 onboarding 種子與離線 ItemKNN 快取之推薦結果（每位使用者一組有序列）。"""
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="itemknn_recommendations"
+    )
+    song = models.ForeignKey(
+        Song, on_delete=models.CASCADE, related_name="itemknn_recommended_entries"
+    )
+    score = models.FloatField()
+    position = models.PositiveSmallIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["position"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "position"],
+                name="unique_user_itemknn_rec_position",
+            ),
+            models.UniqueConstraint(
+                fields=["user", "song"],
+                name="unique_user_itemknn_rec_song",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user} #{self.position} → {self.song_id}"
+
+
+class UserItemKNNRawCandidate(models.Model):
+    """ItemKNN 依分數排序的完整候選；song_id 可能不在 Song 曲庫（無外鍵）。"""
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="itemknn_raw_candidates"
+    )
+    song_id = models.PositiveIntegerField()
+    score = models.FloatField()
+    position = models.PositiveSmallIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["position"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "position"],
+                name="unique_user_itemknn_raw_position",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user} raw #{self.position} → song_id={self.song_id}"

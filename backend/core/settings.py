@@ -13,8 +13,14 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import os
 
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# 本機在 backend/ 執行 manage.py 時載入 .env；若存在 backend/.env 則覆寫（方便本機 DB_HOST/PORT）
+load_dotenv(BASE_DIR.parent / ".env", override=False)
+load_dotenv(BASE_DIR / ".env", override=True)
 
 
 # Quick-start development settings - unsuitable for production
@@ -87,12 +93,10 @@ WSGI_APPLICATION = "core.wsgi.application"
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.environ.get('DB_NAME', 'kkbox_recommend'),     
+        'NAME': os.environ.get('DB_NAME', 'kkbox_recommend'),
         'USER': os.environ.get('DB_USER', 'root'),
-        
-        'PASSWORD': os.environ['DB_PASSWORD'], 
-        
-        'HOST': os.environ.get('DB_HOST', 'db'), 
+        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+        'HOST': os.environ.get('DB_HOST', 'db'),
         'PORT': os.environ.get('DB_PORT', '3306'),
     }
 }
@@ -136,6 +140,7 @@ STATIC_URL = "static/"
 AUTH_USER_MODEL = 'users.User'
 
 GOOGLE_CLIENT_ID = "294550145072-n13kla2nri1hc3k3vfjel9je6rqs3l3b.apps.googleusercontent.com"
+ITEMKNN_ARTIFACT_PATH = os.environ.get("ITEMKNN_ARTIFACT_PATH")
 
 # Session Settings
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'  
