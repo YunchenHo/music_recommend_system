@@ -103,6 +103,18 @@ export default function HomePage() {
     { id: 103, username: "雅婷", profile_picture: null },
   ])
 
+  const [customPlaylists, setCustomPlaylists] = useState([
+    { id: 1, name: "Sad Songs", songs: [] },
+    { id: 2, name: "Party Songs", songs: [] },
+  ])
+
+  const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false)
+  const [playlistModalView, setPlaylistModalView] = useState("list") 
+  // "list" | "create"
+
+  const [newPlaylistName, setNewPlaylistName] = useState("")
+  const [playlistNameError, setPlaylistNameError] = useState("")
+
   // ── 從 API 取得的資料 ──────────────────────────────
   const [user, setUser] = useState({ nickname: "", profilePicture: null })
   const [favorites, setFavorites] = useState([])   // [{ id, song_title, artist_name }]
@@ -241,6 +253,68 @@ export default function HomePage() {
     }
   }
 
+  const openPlaylistModal = () => {
+    if (!currentSong) return
+    setIsPlaylistModalOpen(true)
+    setPlaylistModalView("list")
+    setNewPlaylistName("")
+    setPlaylistNameError("")
+  }
+
+  const closePlaylistModal = () => {
+    setIsPlaylistModalOpen(false)
+    setPlaylistModalView("list")
+    setNewPlaylistName("")
+    setPlaylistNameError("")
+  }
+
+  const handleAddSongToPlaylist = (playlistId) => {
+    if (!currentSong) return
+
+    setCustomPlaylists((prev) =>
+      prev.map((playlist) => {
+        if (playlist.id !== playlistId) return playlist
+
+        const alreadyExists = playlist.songs.some((song) => song.id === currentSong.id)
+        if (alreadyExists) return playlist
+
+        return {
+          ...playlist,
+          songs: [...playlist.songs, currentSong],
+        }
+      })
+    )
+
+    closePlaylistModal()
+  }
+
+  const handleCreatePlaylist = () => {
+    const trimmedName = newPlaylistName.trim()
+
+    if (!trimmedName) {
+      setPlaylistNameError("Please fill out")
+      return
+    }
+
+    const duplicated = customPlaylists.some(
+      (playlist) => playlist.name.trim().toLowerCase() === trimmedName.toLowerCase()
+    )
+
+    if (duplicated) {
+      setPlaylistNameError("Playlist already exists")
+      return
+    }
+
+    const newPlaylist = {
+      id: Date.now(),
+      name: trimmedName,
+      songs: currentSong ? [currentSong] : [],
+    }
+
+    setCustomPlaylists((prev) => [...prev, newPlaylist])
+    closePlaylistModal()
+  }
+
   return (
     <div className="home-page">
 
@@ -316,6 +390,28 @@ export default function HomePage() {
               ))}
             </ul>
           )}
+          {customPlaylists.map((playlist) => (
+            <button
+              key={playlist.id}
+              className="playlist-card"
+              onClick={() => {
+                if (playlist.songs.length > 0) {
+                  handlePlay(playlist.songs[0])
+                }
+              }}
+            >
+              <div className="playlist-card-thumb">
+                <img src="/yeah-rabbit.svg" alt="rabbit" />
+              </div>
+              <div className="playlist-card-info">
+                <span className="playlist-card-name">{playlist.name}</span>
+                <span className="playlist-card-meta">
+                  播放清單 • {playlist.songs.length} 首歌曲
+                </span>
+              </div>
+              <span className="playlist-card-chevron">▼</span>
+            </button>
+          ))}
         </div>
       </aside>
 
@@ -516,6 +612,8 @@ export default function HomePage() {
               <button
                 className="action-btn-new"
                 title="加入播放清單"
+                onClick={openPlaylistModal}
+                disabled={!currentSong}
               >
                 <img src="/add.svg" alt="add" className="add-icon" />
               </button>
@@ -619,6 +717,109 @@ export default function HomePage() {
                       <span className="my-friend-name">{friend.username}</span>
                     </div>
                   ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      {isPlaylistModalOpen && (
+        <div className="playlist-modal-overlay">
+          <div className="playlist-modal" onClick={(e) => e.stopPropagation()}>
+            {playlistModalView === "list" && (
+              <>
+                <div className="playlist-modal-header">
+                  <h2 className="playlist-modal-title">My Playlist</h2>
+                  <button className="playlist-close-btn" onClick={closePlaylistModal}>
+                    ×
+                  </button>
+                </div>
+
+                <div className="playlist-modal-list">
+                  {customPlaylists.map((playlist) => (
+                    <button
+                      key={playlist.id}
+                      className="playlist-modal-item"
+                      onClick={() => handleAddSongToPlaylist(playlist.id)}
+                    >
+                      <div className="playlist-modal-item-icon">
+                        <img src="/yeah-rabbit.svg" alt="rabbit" />
+                      </div>
+
+                      <div className="playlist-modal-item-info">
+                        <span className="playlist-modal-item-name">{playlist.name}</span>
+                        <span className="playlist-modal-item-count">
+                          {playlist.songs.length} 首歌曲
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="playlist-modal-footer">
+                  <button
+                    className="create-playlist-btn"
+                    onClick={() => {
+                      setPlaylistModalView("create")
+                      setPlaylistNameError("")
+                    }}
+                  >
+                    + Create Playlist
+                  </button>
+                </div>
+              </>
+            )}
+
+            {playlistModalView === "create" && (
+              <>
+                <div className="playlist-modal-header">
+                  <button
+                    className="playlist-back-btn"
+                    onClick={() => {
+                      setPlaylistModalView("list")
+                      setPlaylistNameError("")
+                    }}
+                  >
+                    ←
+                  </button>
+
+                  <h2 className="playlist-modal-title">Create New Playlist</h2>
+
+                  <button className="playlist-close-btn" onClick={closePlaylistModal}>
+                    ×
+                  </button>
+                </div>
+
+                <div className="playlist-create-body">
+                  <label className="playlist-input-label">Playlist Name</label>
+
+                  <div className="playlist-input-row">
+                    <input
+                      type="text"
+                      className="playlist-name-input"
+                      value={newPlaylistName}
+                      onChange={(e) => {
+                        setNewPlaylistName(e.target.value)
+                        setPlaylistNameError("")
+                      }}
+                      placeholder="Please fill out"
+                    />
+
+                    {playlistNameError && (
+                      <span className="playlist-input-tooltip">
+                        {playlistNameError}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="playlist-create-actions">
+                    <button
+                      className="playlist-create-confirm-btn"
+                      onClick={handleCreatePlaylist}
+                    >
+                      Create
+                    </button>
+                  </div>
                 </div>
               </>
             )}
