@@ -1,19 +1,8 @@
 import { useState, useEffect } from "react"
 import "../styles/HomePage.css"
-import { getMe, getFavorites, addFavorite, removeFavorite } from "../api/songs"
+import { getMe, getFavorites, addFavorite, removeFavorite, getRecommendations } from "../api/songs"
 
-// ── 推薦歌曲假資料（之後接 /api/songs/recommendations 替換）
-const FAKE_RECOMMENDATIONS = [
-  { id: 902,   song_title: "陽光宅男", artist_name: "周杰倫 (Jay Chou)" },
-  { id: 4660,  song_title: "好久不見", artist_name: "周杰倫 (Jay Chou)" },
-  { id: 11571, song_title: "Fifteen", artist_name: "Taylor Swift" },
-  { id: 6573,  song_title: "When We Were Young", artist_name: "Adele" },
-  { id: 16111, song_title: "Make You Feel My Love", artist_name: "Adele" },
-  { id: 96999, song_title: "Runaway", artist_name: "Ed Sheeran" },
-  { id: 8901,  song_title: "愛情釀的酒", artist_name: "五月天 (Mayday)" },
-  { id: 7900,  song_title: "Good To Be Bad", artist_name: "G.E.M.鄧紫棋" },
-  { id: 15451, song_title: "18", artist_name: "G.E.M.鄧紫棋" },
-]
+// ── 推薦歌曲（從 API 取得）
 
 const FAKE_REVISIT = [
   { id: 2001, song_title: "Lover", artist_name: "Taylor Swift" },
@@ -120,6 +109,7 @@ export default function HomePage() {
   // ── 從 API 取得的資料 ──────────────────────────────
   const [user, setUser] = useState({ nickname: "", profilePicture: null })
   const [favorites, setFavorites] = useState([])   // [{ id, song_title, artist_name }]
+  const [recommendations, setRecommendations] = useState([])  // [{ rank, id, song_title, artist_name, ... }]
 
   // 收藏狀態由 favorites 清單推導（不需要額外 state）
   const isSaved = currentSong ? favorites.some((f) => f.id === currentSong.id) : false
@@ -205,6 +195,10 @@ export default function HomePage() {
 
     getFavorites()
       .then((data) => setFavorites(data))
+      .catch(console.error)
+
+    getRecommendations()
+      .then((data) => setRecommendations(data))
       .catch(console.error)
   }, [])
 
@@ -489,7 +483,7 @@ export default function HomePage() {
             <section className="home-view">
               <h2 className="section-title">Recommendation</h2>
               <div className="recommendation-grid">
-                {FAKE_RECOMMENDATIONS.map((song) => (
+                {recommendations.map((song) => (
                   <div
                     key={song.id}
                     className={`song-card ${currentSong?.id === song.id ? "active" : ""}`}

@@ -25,6 +25,12 @@ export async function removeFavorite(songId) {
   return data
 }
 
+/** GET /api/songs/recommendations — 取得推薦歌曲 */
+export async function getRecommendations() {
+  const { data } = await api.get("/api/songs/recommendations")
+  return data.data  // [{ rank, id, song_title, artist_name, song_image, language }, ...]
+}
+
 /** GET /api/songs/<song_id> — 取得歌曲詳情（含收藏狀態） */
 export async function getSongDetail(songId) {
   const { data } = await api.get(`/api/songs/${songId}`)
