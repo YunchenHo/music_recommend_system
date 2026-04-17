@@ -15,6 +15,55 @@ const FAKE_RECOMMENDATIONS = [
   { id: 15451, song_title: "18", artist_name: "G.E.M.鄧紫棋" },
 ]
 
+const FAKE_REVISIT = [
+  { id: 2001, song_title: "Lover", artist_name: "Taylor Swift" },
+  { id: 2002, song_title: "Baby", artist_name: "Justin Bieber" },
+  { id: 2003, song_title: "Let It Go", artist_name: "Elsa" },
+  { id: 2004, song_title: "Honey Pie", artist_name: "Jawny" },
+  { id: 2005, song_title: "Flowers", artist_name: "Miley Cyrus" },
+  { id: 2006, song_title: "Sorry", artist_name: "Justin Bieber" },
+  { id: 2007, song_title: "Dynamite", artist_name: "BTS" },
+  { id: 2008, song_title: "Someone Like You", artist_name: "Adele" },
+]
+
+const FAKE_FRIENDS = [
+  { id: 3001, friend_name: "小美", song_title: "River Flows in You", artist_name: "Yiruma" },
+  { id: 3002, friend_name: "智華", song_title: "Call Me Maybe", artist_name: "Carly Rae Jepsen" },
+  { id: 3003, friend_name: "雅婷", song_title: "三天三夜", artist_name: "張惠妹" },
+  { id: 3004, friend_name: "阿宏", song_title: "Search Your Friends!", artist_name: "" },
+  { id: 3005, friend_name: "小安", song_title: "晴天", artist_name: "周杰倫" },
+  { id: 3006, friend_name: "小琪", song_title: "Anti-Hero", artist_name: "Taylor Swift" },
+  { id: 3007, friend_name: "小杰", song_title: "Perfect", artist_name: "Ed Sheeran" },
+  { id: 3008, friend_name: "小葵", song_title: "Bad Guy", artist_name: "Billie Eilish" },
+]
+
+const FAKE_USERS = [
+  {
+    id: 1,
+    gmail: "amy@gmail.com",
+    username: "小美",
+    profile_picture: null,
+  },
+  {
+    id: 2,
+    gmail: null,
+    username: "智華",
+    profile_picture: null,
+  },
+  {
+    id: 3,
+    gmail: "ting@gmail.com",
+    username: "雅婷",
+    profile_picture: null,
+  },
+  {
+    id: 4,
+    gmail: "doong@gmail.com",
+    username: "昱婷",
+    profile_picture: null,
+  },
+]
+
 // ─────────────────────────────────────────────────────
 export default function HomePage() {
   // 目前顯示的頁面：'home' | 'search'
@@ -32,12 +81,101 @@ export default function HomePage() {
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
 
+  const [revisitStart, setRevisitStart] = useState(0)
+  const [friendStart, setFriendStart] = useState(0)
+
+  const CARD_PAGE_SIZE = 4
+
+  const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false)
+  const [friendsModalView, setFriendsModalView] = useState("friends") // "friends" | "myFriends"
+  const [friendSearchInput, setFriendSearchInput] = useState("")
+  const [searchedUser, setSearchedUser] = useState(null)
+  const [friendSearchError, setFriendSearchError] = useState("")
+  const [myFriends, setMyFriends] = useState([
+    { id: 101, username: "小美", profile_picture: null },
+    { id: 102, username: "智華", profile_picture: null },
+    { id: 103, username: "雅婷", profile_picture: null },
+  ])
+
   // ── 從 API 取得的資料 ──────────────────────────────
   const [user, setUser] = useState({ nickname: "", profilePicture: null })
   const [favorites, setFavorites] = useState([])   // [{ id, song_title, artist_name }]
 
   // 收藏狀態由 favorites 清單推導（不需要額外 state）
   const isSaved = currentSong ? favorites.some((f) => f.id === currentSong.id) : false
+
+    const revisitVisible = [
+    ...FAKE_REVISIT,
+    ...FAKE_REVISIT,
+  ].slice(revisitStart, revisitStart + CARD_PAGE_SIZE)
+
+  const friendVisible = [
+    ...FAKE_FRIENDS,
+    ...FAKE_FRIENDS,
+  ].slice(friendStart, friendStart + CARD_PAGE_SIZE)
+
+  const handleNextRevisit = () => {
+    setRevisitStart((prev) => (prev + CARD_PAGE_SIZE) % FAKE_REVISIT.length)
+  }
+
+  const handleNextFriend = () => {
+    setFriendStart((prev) => (prev + CARD_PAGE_SIZE) % FAKE_FRIENDS.length)
+  }
+
+  const openFriendsModal = () => {
+    setIsFriendsModalOpen(true)
+    setFriendsModalView("friends")
+    setFriendSearchInput("")
+    setSearchedUser(null)
+    setFriendSearchError("")
+  }
+
+  const closeFriendsModal = () => {
+    setIsFriendsModalOpen(false)
+    setFriendsModalView("friends")
+    setFriendSearchInput("")
+    setSearchedUser(null)
+    setFriendSearchError("")
+  }
+
+  const handleSearchFriend = () => {
+    const keyword = friendSearchInput.trim().toLowerCase()
+
+    if (!keyword) {
+      setSearchedUser(null)
+      setFriendSearchError("請輸入 Gmail")
+      return
+    }
+
+    const foundUser = FAKE_USERS.find(
+      (user) => user.gmail.toLowerCase() === keyword
+    )
+
+    if (foundUser) {
+      setSearchedUser(foundUser)
+      setFriendSearchError("")
+    } else {
+      setSearchedUser(null)
+      setFriendSearchError("查無此人")
+    }
+  }
+
+  const handleAddFriend = (user) => {
+    const alreadyAdded = myFriends.some((friend) => friend.username === user.username)
+
+    if (!alreadyAdded) {
+      setMyFriends((prev) => [
+        ...prev,
+        {
+          id: user.id,
+          username: user.username,
+          profile_picture: user.profile_picture || null,
+        },
+      ])
+    }
+
+    closeFriendsModal()
+  }
 
   // 頁面載入時取得用戶資訊與收藏清單
   useEffect(() => {
@@ -176,7 +314,6 @@ export default function HomePage() {
         {/* 內容區 */}
         <div className="content-area">
 
-          {/* Home 視圖：Recommendation 九宮格（B 負責）*/}
           {view === "home" && (
             <section className="home-view">
               <h2 className="section-title">Recommendation</h2>
@@ -192,6 +329,67 @@ export default function HomePage() {
                   </div>
                 ))}
               </div>
+
+              {/* 重溫舊愛 */}
+              <section className="sub-section">
+                <div className="sub-section-header">
+                  <h3 className="sub-section-title">重溫舊愛</h3>
+                  <button className="more-btn" onClick={handleNextRevisit}>
+                    more &gt;
+                  </button>
+                </div>
+
+                <div className="horizontal-card-list">
+                  {revisitVisible.map((song) => (
+                    <div
+                      key={song.id}
+                      className={`small-song-card ${currentSong?.id === song.id ? "active" : ""}`}
+                      onClick={() => handlePlay(song)}
+                    >
+                      <p className="small-song-title">{song.song_title}</p>
+                      <p className="small-song-artist">{song.artist_name}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* 你的朋友也在聽 */}
+              <section className="sub-section">
+                <div className="sub-section-header">
+                  <h3 className="sub-section-title">你的朋友也在聽</h3>
+                  <button className="more-btn" onClick={handleNextFriend}>
+                    more &gt;
+                  </button>
+                </div>
+
+                <div className="horizontal-card-list">
+                  {friendVisible.slice(0, 3).map((item) => (
+                    <div
+                      key={item.id}
+                      className="friend-card"
+                      onClick={() => {
+                        handlePlay({
+                          id: item.id,
+                          song_title: item.song_title,
+                          artist_name: item.artist_name,
+                        })
+                      }}
+                    >
+                      <p className="friend-name">{item.friend_name}</p>
+                      <p className="friend-song">{item.song_title}</p>
+                      {item.artist_name && <p className="friend-artist">{item.artist_name}</p>}
+                    </div>
+                  ))}
+
+                  <button
+                    className="friend-card search-friend-card"
+                    onClick={openFriendsModal}
+                    type="button"
+                  >
+                    <p className="friend-search-text">Search Your Friends!</p>
+                  </button>
+                </div>
+              </section>
             </section>
           )}
 
@@ -285,7 +483,98 @@ export default function HomePage() {
           </div>
         )}
       </aside>
+      {isFriendsModalOpen && (
+        <div className="friends-modal-overlay">
+          <div className="friends-modal" onClick={(e) => e.stopPropagation()}>
+            {friendsModalView === "friends" && (
+              <>
+                <div className="friends-modal-header">
+                  <h2 className="friends-modal-title">Friends</h2>
+                  <button className="friends-close-btn" onClick={closeFriendsModal}>
+                    ×
+                  </button>
+                </div>
 
+                <div className="friends-search-row">
+                  <input
+                    type="text"
+                    className="friends-search-input"
+                    placeholder="請輸入 Gmail"
+                    value={friendSearchInput}
+                    onChange={(e) => setFriendSearchInput(e.target.value)}
+                  />
+                  <button className="friends-search-btn" onClick={handleSearchFriend}>
+                    搜尋
+                  </button>
+                </div>
+
+                <div className="friends-search-result-area">
+                  {searchedUser && (
+                    <button
+                      className="searched-user-card"
+                      onClick={() => handleAddFriend(searchedUser)}
+                    >
+                      <div className="searched-user-avatar">
+                        {searchedUser.profile_picture ? (
+                          <img src={searchedUser.profile_picture} alt={searchedUser.username} />
+                        ) : (
+                          <span>👤</span>
+                        )}
+                      </div>
+                      <span className="searched-user-name">{searchedUser.username}</span>
+                    </button>
+                  )}
+
+                  {friendSearchError && (
+                    <p className="friend-search-error">{friendSearchError}</p>
+                  )}
+                </div>
+
+                <div className="friends-modal-footer">
+                  <button
+                    className="view-my-friends-btn"
+                    onClick={() => setFriendsModalView("myFriends")}
+                  >
+                    View My Friends
+                  </button>
+                </div>
+              </>
+            )}
+
+            {friendsModalView === "myFriends" && (
+              <>
+                <div className="friends-modal-header">
+                  <button
+                    className="friends-back-btn"
+                    onClick={() => setFriendsModalView("friends")}
+                  >
+                    ←
+                  </button>
+                  <h2 className="friends-modal-title">My Friends</h2>
+                  <button className="friends-close-btn" onClick={closeFriendsModal}>
+                    ×
+                  </button>
+                </div>
+
+                <div className="my-friends-list">
+                  {myFriends.map((friend) => (
+                    <div key={friend.id} className="my-friend-item">
+                      <div className="my-friend-avatar">
+                        {friend.profile_picture ? (
+                          <img src={friend.profile_picture} alt={friend.username} />
+                        ) : (
+                          <span>👤</span>
+                        )}
+                      </div>
+                      <span className="my-friend-name">{friend.username}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
