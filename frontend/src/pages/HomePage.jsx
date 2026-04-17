@@ -30,7 +30,6 @@ const FAKE_FRIENDS = [
   { id: 3001, friend_name: "小美", song_title: "River Flows in You", artist_name: "Yiruma" },
   { id: 3002, friend_name: "智華", song_title: "Call Me Maybe", artist_name: "Carly Rae Jepsen" },
   { id: 3003, friend_name: "雅婷", song_title: "三天三夜", artist_name: "張惠妹" },
-  { id: 3004, friend_name: "阿宏", song_title: "Search Your Friends!", artist_name: "" },
   { id: 3005, friend_name: "小安", song_title: "晴天", artist_name: "周杰倫" },
   { id: 3006, friend_name: "小琪", song_title: "Anti-Hero", artist_name: "Taylor Swift" },
   { id: 3007, friend_name: "小杰", song_title: "Perfect", artist_name: "Ed Sheeran" },
@@ -77,6 +76,13 @@ export default function HomePage() {
 
   // 已收藏的歌曲清單展開/收合
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false)
+
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
+  const [historySongs, setHistorySongs] = useState([
+    { id: 9001, song_title: "Let It Go", artist_name: "Elsa" },
+    { id: 9002, song_title: "Sorry", artist_name: "Justin Bieber" },
+    { id: 9003, song_title: "Flowers", artist_name: "Miley Cyrus" },
+  ])
 
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
@@ -194,6 +200,18 @@ export default function HomePage() {
     setIsPlaying(true)
     setLiked(false)
     setDisliked(false)
+
+    setHistorySongs((prev) => {
+      const filtered = prev.filter((item) => item.id !== song.id)
+      return [
+        {
+          id: song.id,
+          song_title: song.song_title,
+          artist_name: song.artist_name,
+        },
+        ...filtered,
+      ]
+    })
   }
 
   // 切換播放 / 暫停
@@ -251,6 +269,38 @@ export default function HomePage() {
               {isPlaylistOpen ? "▲" : "▼"}
             </span>
           </button>
+
+          <button
+            className={`playlist-card ${isHistoryOpen ? "open" : ""}`}
+            onClick={() => setIsHistoryOpen((prev) => !prev)}
+          >
+            <div className="playlist-card-thumb">
+              <img src="/yeah-rabbit.svg" alt="rabbit" />
+            </div>
+            <div className="playlist-card-info">
+              <span className="playlist-card-name">歷史紀錄</span>
+              <span className="playlist-card-meta">
+                最近播放 • {historySongs.length} 首歌曲
+              </span>
+            </div>
+            <span className="playlist-card-chevron">
+              {isHistoryOpen ? "▲" : "▼"}
+            </span>
+          </button>
+
+          {isHistoryOpen && (
+            <ul className="playlist">
+              {historySongs.map((song) => (
+                <li
+                  key={song.id}
+                  className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
+                  onClick={() => handlePlay(song)}
+                >
+                  {song.song_title}
+                </li>
+              ))}
+            </ul>
+          )}
 
           {/* 展開的歌曲清單 */}
           {isPlaylistOpen && (
