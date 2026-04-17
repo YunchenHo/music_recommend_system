@@ -1,39 +1,19 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import "../styles/HomePage.css"
+import { getMe, getFavorites, addFavorite, removeFavorite } from "../api/songs"
 
-// ── 假資料（之後後端替換）──────────────────────────────
-// 系統內建清單：已收藏的歌曲
-const FAKE_PLAYLIST = [
-  { id: 1,  title: "Let it Go",        artist: "Idina Menzel" },
-  { id: 2,  title: "Someone Like You", artist: "Adele" },
-  { id: 3,  title: "Sorry",            artist: "Justin Bieber" },
-  { id: 4,  title: "Baby",             artist: "Justin Bieber" },
-  { id: 5,  title: "Honey Pie",        artist: "The Beatles" },
-  { id: 6,  title: "Lover",            artist: "Taylor Swift" },
-  { id: 16, title: "Catch Me If You Can", artist: "Girls' Generation" },
-  { id: 17, title: "Dynamite",         artist: "BTS" },
-  { id: 18, title: "Bad Guy",          artist: "Billie Eilish" },
-  { id: 19, title: "Flowers",          artist: "Miley Cyrus" },
-  { id: 20, title: "Anti-Hero",        artist: "Taylor Swift" },
-]
-
+// ── 推薦歌曲假資料（之後接 /api/songs/recommendations 替換）
 const FAKE_RECOMMENDATIONS = [
-  { id: 7,  title: "Perfect",              artist: "Ed Sheeran" },
-  { id: 8,  title: "Shake It Off",         artist: "Taylor Swift" },
-  { id: 9,  title: "小幸運",               artist: "田馥甄" },
-  { id: 10, title: "Don't Leave Me Alone", artist: "David Guetta" },
-  { id: 11, title: "Blinding Lights",      artist: "The Weeknd" },
-  { id: 12, title: "Shape of You",         artist: "Ed Sheeran" },
-  { id: 13, title: "Stay",                 artist: "Justin Bieber" },
-  { id: 14, title: "Levitating",           artist: "Dua Lipa" },
-  { id: 15, title: "As It Was",            artist: "Harry Styles" },
+  { id: 902,   song_title: "陽光宅男", artist_name: "周杰倫 (Jay Chou)" },
+  { id: 4660,  song_title: "好久不見", artist_name: "周杰倫 (Jay Chou)" },
+  { id: 11571, song_title: "Fifteen", artist_name: "Taylor Swift" },
+  { id: 6573,  song_title: "When We Were Young", artist_name: "Adele" },
+  { id: 16111, song_title: "Make You Feel My Love", artist_name: "Adele" },
+  { id: 96999, song_title: "Runaway", artist_name: "Ed Sheeran" },
+  { id: 8901,  song_title: "愛情釀的酒", artist_name: "五月天 (Mayday)" },
+  { id: 7900,  song_title: "Good To Be Bad", artist_name: "G.E.M.鄧紫棋" },
+  { id: 15451, song_title: "18", artist_name: "G.E.M.鄧紫棋" },
 ]
-
-// ── 假用戶資料（之後從 session / context 取）──────────
-const FAKE_USER = {
-  nickname: "Janet",
-  profilePicture: null, // null → 顯示預設頭像
-}
 
 // ─────────────────────────────────────────────────────
 export default function HomePage() {
@@ -46,21 +26,64 @@ export default function HomePage() {
   // 是否正在播放
   const [isPlaying, setIsPlaying] = useState(false)
 
-  // 播放指定歌曲
-  const handlePlay = (song) => {
-    setCurrentSong(song)
-    setIsPlaying(true)
-  }
-
-  // 切換播放 / 暫停
-  const togglePlay = () => setIsPlaying((prev) => !prev)
-
   // 已收藏的歌曲清單展開/收合
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false)
 
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
-  const [saved, setSaved] = useState(false)
+
+  // ── 從 API 取得的資料 ──────────────────────────────
+  const [user, setUser] = useState({ nickname: "", profilePicture: null })
+  const [favorites, setFavorites] = useState([])   // [{ id, song_title, artist_name }]
+
+  // 收藏狀態由 favorites 清單推導（不需要額外 state）
+  const isSaved = currentSong ? favorites.some((f) => f.id === currentSong.id) : false
+
+  // 頁面載入時取得用戶資訊與收藏清單
+  useEffect(() => {
+    getMe()
+      .then((data) => setUser({ nickname: data.username, profilePicture: data.profile_picture || null }))
+      .catch(console.error)
+
+    getFavorites()
+      .then((data) => setFavorites(data))
+      .catch(console.error)
+  }, [])
+
+  // 播放指定歌曲（切歌時重置 liked/disliked）
+  const handlePlay = (song) => {
+    setCurrentSong(song)
+    setIsPlaying(true)
+    setLiked(false)
+    setDisliked(false)
+  }
+
+  // 切換播放 / 暫停
+  const togglePlay = () => setIsPlaying((prev) => !prev)
+
+  // 收藏 / 取消收藏
+  const handleToggleSave = async () => {
+    if (!currentSong) return
+
+    if (isSaved) {
+      try {
+        await removeFavorite(currentSong.id)
+        setFavorites((prev) => prev.filter((f) => f.id !== currentSong.id))
+      } catch (err) {
+        console.error("移除收藏失敗", err)
+      }
+    } else {
+      try {
+        await addFavorite(currentSong.id)
+        setFavorites((prev) => [
+          ...prev,
+          { id: currentSong.id, song_title: currentSong.song_title, artist_name: currentSong.artist_name },
+        ])
+      } catch (err) {
+        console.error("加入收藏失敗", err)
+      }
+    }
+  }
 
   return (
     <div className="home-page">
@@ -83,7 +106,7 @@ export default function HomePage() {
             <div className="playlist-card-info">
               <span className="playlist-card-name">已收藏的歌曲</span>
               <span className="playlist-card-meta">
-                播放清單 • {FAKE_PLAYLIST.length} 首歌曲
+                播放清單 • {favorites.length} 首歌曲
               </span>
             </div>
             <span className="playlist-card-chevron">
@@ -94,13 +117,13 @@ export default function HomePage() {
           {/* 展開的歌曲清單 */}
           {isPlaylistOpen && (
             <ul className="playlist">
-              {FAKE_PLAYLIST.map((song) => (
+              {favorites.map((song) => (
                 <li
                   key={song.id}
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
                   onClick={() => handlePlay(song)}
                 >
-                  {song.title}
+                  {song.song_title}
                 </li>
               ))}
             </ul>
@@ -140,10 +163,10 @@ export default function HomePage() {
 
           {/* 右：用戶資訊 */}
           <div className="navbar-user">
-            <span className="navbar-greeting">一起嗨吧！{FAKE_USER.nickname}</span>
+            <span className="navbar-greeting">一起嗨吧！{user.nickname}</span>
             <div className="avatar">
-              {FAKE_USER.profilePicture
-                ? <img src={FAKE_USER.profilePicture} alt="avatar" />
+              {user.profilePicture
+                ? <img src={user.profilePicture} alt="avatar" />
                 : <span className="avatar-placeholder">🐰</span>
               }
             </div>
@@ -164,8 +187,8 @@ export default function HomePage() {
                     className={`song-card ${currentSong?.id === song.id ? "active" : ""}`}
                     onClick={() => handlePlay(song)}
                   >
-                    <p className="song-card-title">{song.title}</p>
-                    <p className="song-card-artist">{song.artist}</p>
+                    <p className="song-card-title">{song.song_title}</p>
+                    <p className="song-card-artist">{song.artist_name}</p>
                   </div>
                 ))}
               </div>
@@ -207,8 +230,8 @@ export default function HomePage() {
             <div className={`rabbit-glow-wrap ${isPlaying ? "spinning" : ""}`}>
               <img src="/yeah-rabbit.svg" alt="rabbit" className="player-rabbit" />
             </div>
-            <p className="now-title">{currentSong.title}</p>
-            <p className="now-artist">{currentSong.artist}</p>
+            <p className="now-title">{currentSong.song_title}</p>
+            <p className="now-artist">{currentSong.artist_name}</p>
 
             {/* 互動按鈕 */}
             <div className="player-actions">
@@ -235,8 +258,8 @@ export default function HomePage() {
               </button>
 
               <button
-                className={`action-btn-new ${saved ? "active" : ""}`}
-                onClick={() => setSaved(prev => !prev)}
+                className={`action-btn-new ${isSaved ? "active" : ""}`}
+                onClick={handleToggleSave}
                 title="收藏至已收藏的歌曲"
               >
                 <img src="/keep.svg" alt="keep" className="keep-icon" />

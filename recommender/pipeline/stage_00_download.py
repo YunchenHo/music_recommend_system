@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 from pipeline.config import Paths
 from src.data.download import download_and_extract
+import os
 
 
 def run(
@@ -23,7 +24,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Stage 00: download/unzip dataset")
     parser.add_argument("--zip-path", type=Path, default=paths.root / "datasets.zip")
     parser.add_argument("--out-dir", type=Path, default=paths.raw)
-    parser.add_argument("--gdrive-id", type=str, default=None)
+    parser.add_argument("--gdrive-id", type=str, default=os.environ.get("GDRIVE_ID"))
     parser.add_argument("--force", action="store_true", help="force re-extract")
     parser.add_argument(
         "--force-download", action="store_true", help="force re-download zip"

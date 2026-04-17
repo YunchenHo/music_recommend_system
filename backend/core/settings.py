@@ -94,6 +94,9 @@ DATABASES = {
         
         'HOST': os.environ.get('DB_HOST', 'db'), 
         'PORT': os.environ.get('DB_PORT', '3306'),
+        'OPTIONS': {
+            'local_infile': True,
+        },
     }
 }
 
@@ -136,6 +139,9 @@ STATIC_URL = "static/"
 AUTH_USER_MODEL = 'users.User'
 
 GOOGLE_CLIENT_ID = "294550145072-n13kla2nri1hc3k3vfjel9je6rqs3l3b.apps.googleusercontent.com"
+
+# Recommender artifacts directory (mounted read-only from recommender container)
+RECOMMENDER_ARTIFACTS_DIR = Path(os.environ.get('RECOMMENDER_ARTIFACTS_DIR', '/app/recommender_artifacts'))
 
 # Session Settings
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'  
