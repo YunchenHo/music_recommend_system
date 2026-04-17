@@ -1222,3 +1222,8 @@
   justify-content: flex-end;
   margin-top: 28px;
 }
+
+.empty-playlist-item {
+  color: #777;
+  cursor: default;
+}

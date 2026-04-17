@@ -115,6 +115,8 @@ export default function HomePage() {
   const [newPlaylistName, setNewPlaylistName] = useState("")
   const [playlistNameError, setPlaylistNameError] = useState("")
 
+  const [openCustomPlaylistId, setOpenCustomPlaylistId] = useState(null)
+
   // ── 從 API 取得的資料 ──────────────────────────────
   const [user, setUser] = useState({ nickname: "", profilePicture: null })
   const [favorites, setFavorites] = useState([])   // [{ id, song_title, artist_name }]
@@ -391,26 +393,49 @@ export default function HomePage() {
             </ul>
           )}
           {customPlaylists.map((playlist) => (
-            <button
-              key={playlist.id}
-              className="playlist-card"
-              onClick={() => {
-                if (playlist.songs.length > 0) {
-                  handlePlay(playlist.songs[0])
+            <div key={playlist.id}>
+              <button
+                className={`playlist-card ${openCustomPlaylistId === playlist.id ? "open" : ""}`}
+                onClick={() =>
+                  setOpenCustomPlaylistId((prev) =>
+                    prev === playlist.id ? null : playlist.id
+                  )
                 }
-              }}
-            >
-              <div className="playlist-card-thumb">
-                <img src="/yeah-rabbit.svg" alt="rabbit" />
-              </div>
-              <div className="playlist-card-info">
-                <span className="playlist-card-name">{playlist.name}</span>
-                <span className="playlist-card-meta">
-                  播放清單 • {playlist.songs.length} 首歌曲
+              >
+                <div className="playlist-card-thumb">
+                  <img src="/yeah-rabbit.svg" alt="rabbit" />
+                </div>
+                <div className="playlist-card-info">
+                  <span className="playlist-card-name">{playlist.name}</span>
+                  <span className="playlist-card-meta">
+                    播放清單 • {playlist.songs.length} 首歌曲
+                  </span>
+                </div>
+                <span className="playlist-card-chevron">
+                  {openCustomPlaylistId === playlist.id ? "▲" : "▼"}
                 </span>
-              </div>
-              <span className="playlist-card-chevron">▼</span>
-            </button>
+              </button>
+
+              {openCustomPlaylistId === playlist.id && (
+                <ul className="playlist">
+                  {playlist.songs.length > 0 ? (
+                    playlist.songs.map((song) => (
+                      <li
+                        key={song.id}
+                        className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
+                        onClick={() => handlePlay(song)}
+                      >
+                        {song.song_title}
+                      </li>
+                    ))
+                  ) : (
+                    <li className="playlist-item empty-playlist-item">
+                      尚無歌曲
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
           ))}
         </div>
       </aside>
