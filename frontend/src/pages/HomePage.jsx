@@ -346,6 +346,21 @@ export default function HomePage() {
             </span>
           </button>
 
+          {/* 展開的歌曲清單 */}
+          {isPlaylistOpen && (
+            <ul className="playlist">
+              {favorites.map((song) => (
+                <li
+                  key={song.id}
+                  className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
+                  onClick={() => handlePlay(song)}
+                >
+                  {song.song_title}
+                </li>
+              ))}
+            </ul>
+          )}
+
           <button
             className={`playlist-card ${isHistoryOpen ? "open" : ""}`}
             onClick={() => setIsHistoryOpen((prev) => !prev)}
@@ -367,21 +382,6 @@ export default function HomePage() {
           {isHistoryOpen && (
             <ul className="playlist">
               {historySongs.map((song) => (
-                <li
-                  key={song.id}
-                  className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
-                  onClick={() => handlePlay(song)}
-                >
-                  {song.song_title}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {/* 展開的歌曲清單 */}
-          {isPlaylistOpen && (
-            <ul className="playlist">
-              {favorites.map((song) => (
                 <li
                   key={song.id}
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
