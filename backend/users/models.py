@@ -53,6 +53,7 @@ class User(AbstractUser):
         return self.nickname or self.google_name or self.username
 
 class Artist(models.Model):
+    id = models.IntegerField(primary_key=True)
     artist_name = models.CharField(max_length=255)
     artist_image = models.CharField(max_length=500, null=True, blank=True)
     language = models.CharField(max_length=50, blank=True, default='')
@@ -63,11 +64,13 @@ class Artist(models.Model):
 
 
 class Song(models.Model):
+    id = models.IntegerField(primary_key=True)
     song_title = models.CharField(max_length=255)
     artist = models.ForeignKey(Artist, on_delete=models.CASCADE, related_name='songs')
+    artist_name = models.CharField(max_length=255, blank=True, default='')
     album_name = models.CharField(max_length=255, blank=True, default='')
     language = models.CharField(max_length=50, blank=True, default='')
-    song_image = models.CharField(max_length=500, null=True, blank=True) 
+    song_image = models.CharField(max_length=500, null=True, blank=True)
     release_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -101,3 +104,62 @@ class UserOnboardingSong(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.song}"
+
+
+class Playlist(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='playlists')
+    playlist_name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user} - {self.playlist_name}"
+
+
+class PlaylistSong(models.Model):
+    playlist = models.ForeignKey(Playlist, on_delete=models.CASCADE, related_name='songs')
+    song = models.ForeignKey(Song, on_delete=models.CASCADE, related_name='in_playlists')
+    added_at = models.DateTimeField(auto_now_add=True)
+    sort_order = models.SmallIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['playlist', 'song'], name='unique_playlist_song')
+        ]
+
+    def __str__(self):
+        return f"{self.playlist.playlist_name} - {self.song.song_title}"
+
+
+class RecommendationBatch(models.Model):
+    """一次推薦批次，記錄使用的演算法與版本。"""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='recommendation_batches')
+    algorithm = models.CharField(max_length=50)
+    algorithm_version = models.CharField(max_length=50, blank=True, default='')
+    generated_at = models.DateTimeField()
+    total_size = models.SmallIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user} - {self.algorithm} @ {self.generated_at}"
+
+
+class RecommendationItem(models.Model):
+    """推薦批次中的單首歌曲，依 rank 排序。"""
+
+    batch = models.ForeignKey(RecommendationBatch, on_delete=models.CASCADE, related_name='items')
+    rank = models.SmallIntegerField()
+    song = models.ForeignKey(Song, on_delete=models.CASCADE, related_name='recommendation_entries')
+    score = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['rank']
+        constraints = [
+            models.UniqueConstraint(fields=['batch', 'rank'], name='unique_batch_rank'),
+            models.UniqueConstraint(fields=['batch', 'song'], name='unique_batch_song'),
+        ]
+
+    def __str__(self):
+        return f"Batch {self.batch_id} #{self.rank} → {self.song_id}"

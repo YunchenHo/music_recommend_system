@@ -1,12 +1,5 @@
 FROM python:3.13-slim
 
-# 安裝 mysqlclient 必備的編譯工具
-RUN apt-get update && apt-get install -y \
-    gcc \
-    pkg-config \
-    default-libmysqlclient-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 # 安裝 uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 

@@ -18,9 +18,16 @@ _tmp_dataset/
 *.csv
 *.zip
 
+# 放行 backend 啟動需要的 artifact（順序必須在忽略規則之後）
+!recommender/artifacts/
+!recommender/artifacts/itemknn_artifacts.npz
+!recommender/artifacts/artist_id_map_small.csv
+!recommender/artifacts/song_for_db_small.csv
+
 # Jupyter
 .ipynb_checkpoints/
 
 # Environment and Frontend
 .env
 node_modules/
+.claude

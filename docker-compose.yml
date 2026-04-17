@@ -2,6 +2,7 @@ services:
   db:
     image: mysql:8.0
     container_name: music_mysql
+    command: --local-infile=1
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
@@ -20,11 +21,18 @@ services:
       - db
     env_file:
       - .env
+    environment:
+      # 覆寫 .env：容器內必須用 service 名稱 db，不可沿用本機的 127.0.0.1
+      DB_HOST: db
+      DB_PORT: "3306"
     volumes:
       - ./backend:/app  
       - /app/.venv
+      - ./recommender/artifacts:/app/recommender_artifacts:ro
     command: >
-      sh -c "uv run python manage.py migrate && uv run python manage.py runserver 0.0.0.0:8000"
+      sh -c "uv run python manage.py migrate &&
+             uv run python manage.py import_kkbox_data &&
+             uv run python manage.py runserver 0.0.0.0:8000"
     
   frontend:
     build: 
@@ -45,6 +53,7 @@ services:
     container_name: music_recommender
     volumes:
       - ./recommender:/app
+      - ./data:/app/data
     env_file:
       - .env
     tty: true

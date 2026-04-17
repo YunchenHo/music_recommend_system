@@ -189,26 +189,28 @@ def fit_item_knn(
     return neigh_items, neigh_sims
 
 
-def recommend_for_user(
-    user_idx: int,
-    X_ui: csr_matrix,
+def recommend_from_seed_item_indices(
+    seed_item_indices: np.ndarray,
     neigh_items: np.ndarray,
     neigh_sims: np.ndarray,
     top_n: int = 20,
     aggregation: str = "baseline",
     sim_threshold: float = 0.0,
 ):
-    s, e = X_ui.indptr[user_idx], X_ui.indptr[user_idx + 1]
-    user_items = X_ui.indices[s:e]
-
-    if user_items.size == 0:
+    """
+    ItemKNN 推薦：僅依「種子歌曲」在模型中的 item 欄位索引（與 X_ui 的欄位索引一致）。
+    適用 onboarding 等沒有訓練集 user 列的情形。
+    """
+    seed_item_indices = np.asarray(seed_item_indices, dtype=np.int32).ravel()
+    if seed_item_indices.size == 0:
         return np.array([], dtype=np.int32), np.array([], dtype=np.float32)
 
-    seen = set(user_items.tolist())
+    seen = set(int(x) for x in seed_item_indices.tolist())
     scores = {}
-    num_seed = int(user_items.size)
+    num_seed = int(seed_item_indices.size)
 
-    for it in user_items:
+    for it in seed_item_indices:
+        it = int(it)
         for nb, sim in zip(neigh_items[it], neigh_sims[it]):
             if nb in seen:
                 continue
@@ -235,6 +237,27 @@ def recommend_for_user(
 
     order = np.argsort(-cand_scores)
     return cand_items[order], cand_scores[order]
+
+
+def recommend_for_user(
+    user_idx: int,
+    X_ui: csr_matrix,
+    neigh_items: np.ndarray,
+    neigh_sims: np.ndarray,
+    top_n: int = 20,
+    aggregation: str = "baseline",
+    sim_threshold: float = 0.0,
+):
+    s, e = X_ui.indptr[user_idx], X_ui.indptr[user_idx + 1]
+    user_items = X_ui.indices[s:e]
+    return recommend_from_seed_item_indices(
+        user_items,
+        neigh_items,
+        neigh_sims,
+        top_n=top_n,
+        aggregation=aggregation,
+        sim_threshold=sim_threshold,
+    )
 
 
 def evaluate_loou(
