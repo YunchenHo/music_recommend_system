@@ -23,12 +23,13 @@ from .models import (
     Song,
     UserOnboardingArtist,
     UserOnboardingSong,
-    UserItemKNNRawCandidate,
-    UserItemKNNRecommendation,
+    Playlist,
+    PlaylistSong,
+    RecommendationBatch,
+    RecommendationItem,
 )
 
 logger = logging.getLogger(__name__)
-
 
 @method_decorator(csrf_exempt, name='dispatch')
 @method_decorator(ensure_csrf_cookie, name='dispatch')
@@ -295,119 +296,264 @@ class OnboardingSubmitView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-class OnboardingRecommendationsView(APIView):
-    """讀取已快取之 ItemKNN 推薦（onboarding 送出時寫入）；?refresh=1 時依種子重算。回傳 song id 列表。"""
+# ---------------------------------------------------------------------------
+# Songs API: Recommendations + Favorites (archive playlist)
+# ---------------------------------------------------------------------------
 
+ARCHIVE_PLAYLIST_NAME = "archive"
+
+
+class RecommendationsView(APIView):
+    """GET /api/songs/recommendations — 取得推薦歌曲列表（ItemKNN）"""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        try:
-            top_n = int(request.query_params.get("top_n", 30))
-        except (TypeError, ValueError):
-            return Response(
-                {
-                    "status": "error",
-                    "message": "top_n must be an integer.",
-                    "code": "INVALID_TOP_N",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if top_n < 1 or top_n > 200:
-            return Response(
-                {
-                    "status": "error",
-                    "message": "top_n must be between 1 and 200.",
-                    "code": "INVALID_TOP_N",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         user = request.user
-        seed_ids = list(
-            UserOnboardingSong.objects.filter(user=user).values_list("song_id", flat=True)
-        )
-        if not seed_ids:
-            return Response(
-                {
-                    "status": "error",
-                    "message": "No onboarding songs yet.",
-                    "code": "NO_ONBOARDING_SONGS",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
-        want_refresh = request.query_params.get("refresh") in ("1", "true", "yes")
-        skipped: list[int] = []
-
-        if want_refresh:
-            try:
-                _, skipped = onboarding_itemknn_store.refresh_stored_itemknn_recommendations(
-                    user, top_n=top_n
-                )
-            except FileNotFoundError as exc:
-                return Response(
-                    {
-                        "status": "error",
-                        "message": str(exc),
-                        "code": "ITEMKNN_ARTIFACT_MISSING",
-                    },
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                )
-            except ValueError as exc:
-                return Response(
-                    {
-                        "status": "error",
-                        "message": str(exc),
-                        "code": "ITEMKNN_ARTIFACT_INVALID",
-                    },
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
-        elif not UserItemKNNRecommendation.objects.filter(user=user).exists():
-            store_n = min(200, max(top_n, onboarding_itemknn_store.DEFAULT_STORE_TOP_N))
-            try:
-                _, skipped = onboarding_itemknn_store.refresh_stored_itemknn_recommendations(
-                    user, top_n=store_n
-                )
-            except FileNotFoundError as exc:
-                return Response(
-                    {
-                        "status": "error",
-                        "message": str(exc),
-                        "code": "ITEMKNN_ARTIFACT_MISSING",
-                    },
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                )
-            except ValueError as exc:
-                return Response(
-                    {
-                        "status": "error",
-                        "message": str(exc),
-                        "code": "ITEMKNN_ARTIFACT_INVALID",
-                    },
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
-
-        song_ids = list(
-            UserItemKNNRecommendation.objects.filter(user=user)
-            .order_by("position")
-            .values_list("song_id", flat=True)[:top_n]
-        )
-
-        raw_candidates = list(
-            UserItemKNNRawCandidate.objects.filter(user=user)
-            .order_by("position")
-            .values("song_id", "score", "position")
-        )
-
-        return Response(
-            {
+        # 1. 防呆：沒有 onboarding 種子歌曲
+        seed_exists = UserOnboardingSong.objects.filter(user=user).exists()
+        if not seed_exists:
+            return Response({
                 "status": "success",
-                "data": {
-                    "song_ids": song_ids,
-                    "raw_candidates": raw_candidates,
-                    "skipped_seed_ids": skipped,
-                },
-            },
-            status=status.HTTP_200_OK,
+                "data": [],
+                "message": "No recommendations yet. Complete onboarding first.",
+            }, status=status.HTTP_200_OK)
+
+        # 2. 查找該使用者最新的推薦批次
+        batch = RecommendationBatch.objects.filter(
+            user=user,
+        ).order_by('-generated_at').first()
+
+        # 3. Fallback：DB 沒有推薦紀錄時自動算一次
+        if batch is None:
+            try:
+                onboarding_itemknn_store.refresh_stored_itemknn_recommendations(user, top_n=30)
+                batch = RecommendationBatch.objects.filter(
+                    user=user,
+                ).order_by('-generated_at').first()
+            except FileNotFoundError as exc:
+                logger.warning("ItemKNN refresh failed (artifact missing): %s", exc)
+            except ValueError as exc:
+                logger.warning("ItemKNN refresh failed (invalid artifact): %s", exc)
+
+        if batch is None:
+            return Response({
+                "status": "success",
+                "data": [],
+                "message": "Recommendations temporarily unavailable.",
+            }, status=status.HTTP_200_OK)
+
+        # 4. 從批次中讀取前 9 首，帶出歌曲資訊
+        items = (
+            RecommendationItem.objects
+            .filter(batch=batch)
+            .select_related('song')
+            .order_by('rank')[:9]
         )
+
+        data = [
+            {
+                "rank": item.rank,
+                "id": item.song.id,
+                "song_title": item.song.song_title,
+                "artist_name": item.song.artist_name,
+                "song_image": item.song.song_image,
+                "language": item.song.language,
+            }
+            for item in items
+        ]
+
+        return Response({
+            "status": "success",
+            "data": data,
+        }, status=status.HTTP_200_OK)
+
+
+class SongDetailView(APIView):
+    """GET /api/songs/<song_id> — 取得單首歌曲詳細資訊（含收藏狀態）"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, song_id):
+        try:
+            song = Song.objects.get(id=song_id)
+        except Song.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Song not found.",
+                "code": "SONG_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        is_favorited = PlaylistSong.objects.filter(
+            playlist__user=request.user,
+            playlist__playlist_name=ARCHIVE_PLAYLIST_NAME,
+            song=song,
+        ).exists()
+
+        return Response({
+            "status": "success",
+            "data": {
+                "id": song.id,
+                "song_title": song.song_title,
+                "artist_name": song.artist_name,
+                "album_name": song.album_name,
+                "language": song.language,
+                "song_image": song.song_image,
+                "is_favorited": is_favorited,
+            },
+        }, status=status.HTTP_200_OK)
+
+
+class FavoritesView(APIView):
+    """
+    GET  /api/songs/favorites — 取得收藏歌曲列表
+    POST /api/songs/favorites — 加入收藏 { "song_id": 123 }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_or_create_archive(self, user):
+        playlist, _ = Playlist.objects.get_or_create(
+            user=user,
+            playlist_name=ARCHIVE_PLAYLIST_NAME,
+        )
+        return playlist
+
+    def get(self, request):
+        try:
+            playlist = Playlist.objects.get(
+                user=request.user,
+                playlist_name=ARCHIVE_PLAYLIST_NAME,
+            )
+        except Playlist.DoesNotExist:
+            return Response({
+                "status": "success",
+                "data": [],
+            }, status=status.HTTP_200_OK)
+
+        playlist_songs = PlaylistSong.objects.filter(
+            playlist=playlist
+        ).select_related('song').order_by('-added_at')
+
+        data = [
+            {
+                "id": ps.song.id,
+                "song_title": ps.song.song_title,
+                "artist_name": ps.song.artist_name,
+            }
+            for ps in playlist_songs
+        ]
+
+        return Response({
+            "status": "success",
+            "data": data,
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        song_id = request.data.get('song_id')
+
+        if song_id is None:
+            return Response({
+                "status": "error",
+                "message": "song_id is required.",
+                "code": "MISSING_SONG_ID",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            song = Song.objects.get(id=song_id)
+        except Song.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Song not found.",
+                "code": "SONG_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        playlist = self._get_or_create_archive(request.user)
+
+        _, created = PlaylistSong.objects.get_or_create(
+            playlist=playlist,
+            song=song,
+        )
+
+        if not created:
+            return Response({
+                "status": "error",
+                "message": "Song already in favorites.",
+                "code": "ALREADY_FAVORITED",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            "status": "success",
+            "message": "Song added to favorites.",
+        }, status=status.HTTP_201_CREATED)
+
+
+class FavoriteDetailView(APIView):
+    """DELETE /api/songs/favorites/<song_id> — 移除收藏"""
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, song_id):
+        try:
+            playlist = Playlist.objects.get(
+                user=request.user,
+                playlist_name=ARCHIVE_PLAYLIST_NAME,
+            )
+        except Playlist.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Favorite not found.",
+                "code": "NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        deleted, _ = PlaylistSong.objects.filter(
+            playlist=playlist,
+            song_id=song_id,
+        ).delete()
+
+        if deleted == 0:
+            return Response({
+                "status": "error",
+                "message": "Song not in favorites.",
+                "code": "NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({
+            "status": "success",
+            "message": "Song removed from favorites.",
+        }, status=status.HTTP_200_OK)
+
+
+# ---------------------------------------------------------------------------
+# Dev-only: 模擬登入（僅在 DEBUG=True 時可用）
+# ---------------------------------------------------------------------------
+
+@method_decorator(csrf_exempt, name='dispatch')
+class DevLoginView(APIView):
+    """POST /api/auth/dev-login — 開發環境模擬登入，自動建立測試用戶並建立 session"""
+
+    def post(self, request):
+        if not settings.DEBUG:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        username = request.data.get('username', 'testuser')
+
+        user, created = User.objects.get_or_create(
+            username=username,
+            defaults={
+                'google_id': f'dev_{username}',
+                'google_name': username,
+                'email': f'{username}@dev.local',
+                'nickname': username[:16],
+                'profile_completed': True,
+            }
+        )
+
+        login(request, user)
+
+        return Response({
+            "status": "success",
+            "message": f"Logged in as {username}" + (" (created)" if created else ""),
+            "data": {
+                "user_id": user.id,
+                "username": user.username,
+                "sessionid": request.session.session_key,
+            }
+        }, status=status.HTTP_200_OK)

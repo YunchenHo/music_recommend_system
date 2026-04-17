@@ -6,6 +6,7 @@ from .views import (
     OnboardingSongsView,
     OnboardingSubmitView,
     AuthMeView,
+    DevLoginView,
 )
 
 urlpatterns = [
@@ -13,4 +14,7 @@ urlpatterns = [
     path('register', RegisterProfileView.as_view(), name='register'),
 
     path('me', AuthMeView.as_view(), name='auth_me'),
+
+    # Dev-only: 模擬登入（僅 DEBUG=True 時可用）
+    path('dev-login', DevLoginView.as_view(), name='dev-login'),
 ]

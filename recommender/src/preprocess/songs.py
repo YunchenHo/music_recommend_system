@@ -4,7 +4,7 @@ from sklearn.preprocessing import LabelEncoder
 
 def preprocess_songs(
     songs: pd.DataFrame, song_extra: pd.DataFrame
-) -> tuple[pd.DataFrame, LabelEncoder]:
+) -> tuple[pd.DataFrame, LabelEncoder, dict[str, int]]:
     song_extra_copy = song_extra.copy()
     song_encoder = LabelEncoder()
     song_extra_copy["song_id_new"] = song_encoder.fit_transform(song_extra_copy["song_id"])
@@ -46,4 +46,11 @@ def preprocess_songs(
     song_merge["isrc"] = song_merge["isrc"].fillna("NONE")
     song_merge["song_id_new"] = song_merge["song_id_new"].fillna(-1).astype(int)
 
-    return song_merge, song_encoder
+    # --- Artist encoding: sorted unique artist_name -> integer ID (1-based) ---
+    sorted_artists = sorted(song_merge["artist_name"].unique())
+    artist_id_map: dict[str, int] = {
+        name: idx + 1 for idx, name in enumerate(sorted_artists)
+    }
+    song_merge["artist_id"] = song_merge["artist_name"].map(artist_id_map)
+
+    return song_merge, song_encoder, artist_id_map

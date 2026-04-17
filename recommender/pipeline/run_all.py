@@ -1,4 +1,5 @@
 import argparse
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -28,7 +29,7 @@ def main() -> int:
     parser.add_argument("--to-stage", type=str, default="04_train")
     parser.add_argument("--zip-path", type=Path, default=paths.root / "datasets.zip")
     parser.add_argument("--out-dir", type=Path, default=paths.raw)
-    parser.add_argument("--gdrive-id", type=str, default=None)
+    parser.add_argument("--gdrive-id", type=str, default=os.environ.get("GDRIVE_ID"))
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--force-download", action="store_true")
     parser.add_argument("--top-k", type=int, default=5000)
@@ -69,6 +70,8 @@ def main() -> int:
                 paths.raw / "song_extra_info.csv",
                 paths.interim / "song_merge.parquet",
                 paths.artifacts / "song_encoder.pkl",
+                paths.artifacts / "artist_id_map.csv",
+                paths.artifacts / "song_for_db.csv",
                 paths.raw,
             )
         elif name == "03_song_features":
