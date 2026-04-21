@@ -82,6 +82,40 @@ export default function HomePage() {
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
   const playerRef = useRef(null)
 
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const progressIntervalRef = useRef(null)
+
+  useEffect(() => {
+    if (isPlaying) {
+      progressIntervalRef.current = setInterval(() => {
+        if (playerRef.current) {
+          setCurrentTime(playerRef.current.getCurrentTime() || 0)
+          setDuration(playerRef.current.getDuration() || 0)
+        }
+      }, 500)
+    } else {
+      clearInterval(progressIntervalRef.current)
+    }
+    return () => clearInterval(progressIntervalRef.current)
+  }, [isPlaying, youtubeVideoId])
+
+  const isDragging = useRef(false)
+  const [dragTime, setDragTime] = useState(null)
+
+  const formatTime = (secs) => {
+    if (!secs || isNaN(secs)) return "0:00"
+    const m = Math.floor(secs / 60)
+    const s = Math.floor(secs % 60)
+    return `${m}:${s.toString().padStart(2, "0")}`
+  }
+
+  const calcSeekTime = (e, el) => {
+    const rect = el.getBoundingClientRect()
+    const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1)
+    return ratio * duration
+  }
+
   const [revisitStart, setRevisitStart] = useState(0)
   const [friendStart, setFriendStart] = useState(0)
 
@@ -228,6 +262,8 @@ export default function HomePage() {
     })
 
     setYoutubeVideoId(null)
+    setCurrentTime(0)
+    setDuration(0)
     setIsLoadingVideo(true)
     try {
       const videoId = await searchYouTubeVideoId(song.song_title, song.artist_name)
@@ -663,6 +699,47 @@ export default function HomePage() {
                 <img src="/add.svg" alt="add" className="add-icon" />
               </button>
 
+            </div>
+
+            {/* 進度條 */}
+            <div className="progress-bar-section">
+              <div
+                className="progress-bar-wrap"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  if (!playerRef.current || !duration) return
+                  isDragging.current = true
+                  const bar = e.currentTarget
+                  setDragTime(calcSeekTime(e, bar))
+
+                  const onMove = (ev) => {
+                    setDragTime(calcSeekTime(ev, bar))
+                  }
+                  const onUp = (ev) => {
+                    const t = calcSeekTime(ev, bar)
+                    playerRef.current.seekTo(t)
+                    setCurrentTime(t)
+                    setDragTime(null)
+                    isDragging.current = false
+                    window.removeEventListener("mousemove", onMove)
+                    window.removeEventListener("mouseup", onUp)
+                  }
+                  window.addEventListener("mousemove", onMove)
+                  window.addEventListener("mouseup", onUp)
+                }}
+              >
+                <div
+                  className="progress-bar-fill"
+                  style={{
+                    width: duration ? `${((dragTime ?? currentTime) / duration) * 100}%` : "0%",
+                    transition: dragTime !== null ? "none" : "width 0.4s linear",
+                  }}
+                />
+              </div>
+              <div className="progress-time-row">
+                <span>{formatTime(dragTime ?? currentTime)}</span>
+                <span>{formatTime(duration)}</span>
+              </div>
             </div>
 
             {/* 播放控制 */}
