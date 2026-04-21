@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import YouTube from "react-youtube"
 import "../styles/HomePage.css"
 import { getMe, getFavorites, addFavorite, removeFavorite, getRecommendations } from "../api/songs"
+import { searchYouTubeVideoId } from "../api/youtube"
 
 // ── 推薦歌曲（從 API 取得）
 
@@ -75,6 +77,10 @@ export default function HomePage() {
 
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
+
+  const [youtubeVideoId, setYoutubeVideoId] = useState(null)
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false)
+  const playerRef = useRef(null)
 
   const [revisitStart, setRevisitStart] = useState(0)
   const [friendStart, setFriendStart] = useState(0)
@@ -203,7 +209,7 @@ export default function HomePage() {
   }, [])
 
   // 播放指定歌曲（切歌時重置 liked/disliked）
-  const handlePlay = (song) => {
+  const handlePlay = async (song) => {
     setCurrentSong(song)
     setIsPlaying(true)
     setLiked(false)
@@ -220,10 +226,30 @@ export default function HomePage() {
         ...filtered,
       ]
     })
+
+    setYoutubeVideoId(null)
+    setIsLoadingVideo(true)
+    try {
+      const videoId = await searchYouTubeVideoId(song.song_title, song.artist_name)
+      setYoutubeVideoId(videoId)
+    } catch (err) {
+      console.error("YouTube 搜尋失敗", err)
+    } finally {
+      setIsLoadingVideo(false)
+    }
   }
 
   // 切換播放 / 暫停
-  const togglePlay = () => setIsPlaying((prev) => !prev)
+  const togglePlay = () => {
+    setIsPlaying((prev) => {
+      if (prev) {
+        playerRef.current?.pauseVideo()
+      } else {
+        playerRef.current?.playVideo()
+      }
+      return !prev
+    })
+  }
 
   // 收藏 / 取消收藏
   const handleToggleSave = async () => {
@@ -647,6 +673,25 @@ export default function HomePage() {
                 className="play-icon"
               />
             </button>
+
+            {/* YouTube 播放器 */}
+            <div className="youtube-player-wrap">
+              {isLoadingVideo && <p className="youtube-loading">載入中...</p>}
+              {youtubeVideoId && (
+                <YouTube
+                  videoId={youtubeVideoId}
+                  opts={{
+                    width: "100%",
+                    height: "160",
+                    playerVars: { autoplay: 1 },
+                  }}
+                  onReady={(e) => {
+                    playerRef.current = e.target
+                  }}
+                  onEnd={() => setIsPlaying(false)}
+                />
+              )}
+            </div>
           </div>
         )}
       </aside>

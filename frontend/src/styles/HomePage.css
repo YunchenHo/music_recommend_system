@@ -1217,3 +1217,17 @@
   color: #777;
   cursor: default;
 }
+
+.youtube-player-wrap {
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  position: absolute;
+}
+
+.youtube-loading {
+  color: #aaa;
+  font-size: 0.85rem;
+  text-align: center;
+  margin: 8px 0;
+}
