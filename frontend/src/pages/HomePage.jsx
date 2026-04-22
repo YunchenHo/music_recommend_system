@@ -261,6 +261,8 @@ export default function HomePage() {
       ]
     })
 
+    clearInterval(progressIntervalRef.current)
+    playerRef.current = null
     setYoutubeVideoId(null)
     setCurrentTime(0)
     setDuration(0)
