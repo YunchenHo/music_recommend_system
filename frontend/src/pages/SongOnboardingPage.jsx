@@ -23,14 +23,12 @@ export default function SongOnboardingPage() {
       { id: 556389, title: "說好的幸福呢", artist: "周杰倫", cover: "/songs-cover/556389.png" },
       { id: 523020, title: "焚情", artist: "張信哲 ", cover: "/songs-cover/523020.png" },
       { id: 1589161, title: "私奔到月球", artist: "五月天 ", cover: "/songs-cover/1589161.png" },
-      /*{ id: 334128, title: "夜會", artist: "王菲 ", cover: "/songs-cover/334128.png" },*/
       { id: 1567790, title: "如果可以", artist: "韋禮安", cover: "/songs-cover/1567790.png" },
       { id: 803123, title: "倒帶", artist: "蔡依林", cover: "/songs-cover/803123.png" },
       { id: 1053126, title: "煙", artist: "王菲", cover: "/songs-cover/1053126.png" },
     ],
 
     English: [
-      /*{ id: 1456067, title: "Ballers Night Out", artist: "Snoop Dogg", cover: "/songs-cover/1456067.png" },*/
       { id: 1919590, title: "Love Story", artist: "Taylor Swift", cover: "/songs-cover/1919590.png" },
       { id: 1392127, title: "Everglow", artist: "Coldplay", cover: "/songs-cover/1392127.png" },
       { id: 2109591, title: "Photograph", artist: "Ed Sheeran", cover: "/songs-cover/2109591.png" },
@@ -46,19 +44,9 @@ export default function SongOnboardingPage() {
     ],
 
     Japanese: [
-      /*{ id: 1938707, title: "うつし絵", artist: "Yui Aragaki (新垣結衣)", cover: "/songs-cover/1938707.png" },*/
-      /*{ id: 1498037	, title: "Aishiteru", artist: "Base Ball Bear", cover: "/songs-cover/1498037.png" },*/
-      /*{ id: 1644537, title: "ブラックアウト", artist: "Tokyo Incidents", cover: "/songs-cover/1644537.png" },*/
       { id: 2155543, title: "make it happen", artist: "Namie Amuro (安室奈美恵)", cover: "/songs-cover/2155543.png" },
       { id: 1697710, title: "shooting star", artist: "Ai Otsuka (大塚愛)", cover: "/songs-cover/1697710.png" },
-      /*{ id: 1561165, title: "Slow Dancin'", artist: "松下優也", cover: "/songs-cover/1561165.png" },*/
       { id: 1502091, title: "Risky", artist: "LiSA", cover: "/songs-cover/1502091.png" },
-      /*{ id: 552011, title: "夏日情懷", artist: "MISIA", cover: "/songs-cover/552011.png" },*/
-      /*{ id: 78734, title: "ひまわりの約束", artist: "秦基博", cover: "/songs-cover/78734.png" },*/
-      /*{ id: 1073371, title: "Love in the Ice", artist: "Tohoshinki (東方神起)", cover: "/songs-cover/1073371.png" },*/
-      /*{ id: 407150, title: "胸キュン", artist: "AOA", cover: "/songs-cover/407150.png" },*/
-      /*{ id: 1903626, title: "The New World", artist: "平原綾香", cover: "/songs-cover/1903626.png" },*/
-      
       { id: 1472375, title: "Make-up Shadow", artist: "Julee Karan (樹里からん)", cover: "/songs-cover/1472375.png" },
       { id: 1150507, title: "Armstrong", artist: "Suchmos", cover: "/songs-cover/1150507.png" },
       { id: 1277043, title: "手紙", artist: "BRIGHT", cover: "/songs-cover/1277043.png" },
@@ -77,12 +65,8 @@ export default function SongOnboardingPage() {
       { id: 1358918	, title: "미운오리", artist: "IU", cover: "/songs-cover/1358918.png" },
       { id: 1543538, title: "Very Very Very", artist: "I.O.I", cover: "/songs-cover/1543538.png" },
       { id: 2126048, title: "THE LEADERS", artist: "G-DRAGON", cover: "/songs-cover/2126048.png" },
-      /*{ id: 335663, title: "So Good", artist: "Jay Park", cover: "/songs-cover/335663.png" },*/
-      /*{ id: 308, title: "My Romeo", artist: "Jessi", cover: "/songs-cover/308.png" },*/
       { id: 273083, title: "Heaven", artist: "Ailee", cover: "/songs-cover/273083.png" },
       { id: 488759, title: "Gee", artist: "Girls' Generation", cover: "/songs-cover/488759.png" },
-      /*{ id: 2267877, title: "오늘 밤", artist: "Hyolyn", cover: "/songs-cover/2267877.png" },*/
-      /*{ id: 1721221, title: "왜 나만 아프죠", artist: "IVY", cover: "/songs-cover/1721221.png" },*/
       { id: 572864, title: "SORRY SORRY", artist: "SUPER JUNIOR", cover: "/songs-cover/572864.png" },
       { id: 631589, title: "I Need A Girl", artist: "BIGBANG TAEYANG", cover: "/songs-cover/631589.png" },
       { id: 1061766, title: "Why You Think I'm In Love With You", artist: "Ailee", cover: "/songs-cover/1061766.png" },
