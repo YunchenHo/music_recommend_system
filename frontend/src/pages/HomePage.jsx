@@ -54,6 +54,18 @@ const FAKE_USERS = [
   },
 ]
 
+const PLAYLIST_ICONS = [
+  "yeah-rabbit.svg",
+  "mifi.svg",
+  "jojo.svg",
+  "egg.svg",
+  "ahhh.svg",
+  "angry_heart.svg",
+  "chicken_nugget.svg",
+  "one_punch.svg",
+]
+
+
 // ─────────────────────────────────────────────────────
 export default function HomePage() {
   // 目前顯示的頁面：'home' | 'search'
@@ -138,8 +150,9 @@ export default function HomePage() {
   ])
 
   const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false)
-  const [playlistModalView, setPlaylistModalView] = useState("list") 
+  const [playlistModalView, setPlaylistModalView] = useState("list")
   // "list" | "create"
+  const [selectedPlaylistIcon, setSelectedPlaylistIcon] = useState(PLAYLIST_ICONS[0])
 
   const [newPlaylistName, setNewPlaylistName] = useState("")
   const [playlistNameError, setPlaylistNameError] = useState("")
@@ -325,6 +338,7 @@ export default function HomePage() {
     setIsPlaylistModalOpen(false)
     setPlaylistModalView("list")
     setNewPlaylistName("")
+    setSelectedPlaylistIcon(PLAYLIST_ICONS[0])
     setPlaylistNameError("")
   }
 
@@ -368,6 +382,7 @@ export default function HomePage() {
     const newPlaylist = {
       id: Date.now(),
       name: trimmedName,
+      icon: selectedPlaylistIcon,
       songs: currentSong ? [currentSong] : [],
     }
 
@@ -461,7 +476,7 @@ export default function HomePage() {
                 }
               >
                 <div className="playlist-card-thumb">
-                  <img src="/yeah-rabbit.svg" alt="rabbit" />
+                  <img src={`/album_icon/${playlist.icon || PLAYLIST_ICONS[0]}`} alt={playlist.name} />
                 </div>
                 <div className="playlist-card-info">
                   <span className="playlist-card-name">{playlist.name}</span>
@@ -886,7 +901,7 @@ export default function HomePage() {
                       onClick={() => handleAddSongToPlaylist(playlist.id)}
                     >
                       <div className="playlist-modal-item-icon">
-                        <img src="/yeah-rabbit.svg" alt="rabbit" />
+                        <img src={`/album_icon/${playlist.icon || PLAYLIST_ICONS[0]}`} alt={playlist.name} />
                       </div>
 
                       <div className="playlist-modal-item-info">
@@ -953,6 +968,22 @@ export default function HomePage() {
                         {playlistNameError}
                       </span>
                     )}
+                  </div>
+
+                  <div className="playlist-icon-section">
+                    <label className="playlist-input-label">Playlist Icon</label>
+                    <div className="playlist-icon-grid">
+                      {PLAYLIST_ICONS.map((icon) => (
+                        <button
+                          key={icon}
+                          type="button"
+                          className={`playlist-icon-option ${selectedPlaylistIcon === icon ? "selected" : ""}`}
+                          onClick={() => setSelectedPlaylistIcon(icon)}
+                        >
+                          <img src={`/album_icon/${icon}`} alt={icon} />
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="playlist-create-actions">
