@@ -1034,7 +1034,7 @@ class HistoryView(APIView):
                 "code": "INVALID_LIMIT_OR_OFFSET",
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        queryset = History.objects.filter(user=user)
+        queryset = History.objects.filter(user=user).select_related('song')
 
         if song_id is not None:
             queryset = queryset.filter(song_id=song_id)
@@ -1056,11 +1056,18 @@ class HistoryView(APIView):
 
         results = [ ]
         for history in queryset:
+            song = history.song
             results.append({
                 "id": history.id,
-                "song_id": history.song_id, # 這裡是直接取 history.song_id
+                "song_id": history.song_id,
+                "song_title": song.song_title,
+                "artist_name": song.artist_name,
+                "album_name": song.album_name,
+                "song_image": song.song_image,
+                "language": song.language,
                 "watch_seconds": history.watch_seconds,
                 "source": history.source,
+                "played_at": history.played_at,
                 "created_at": history.created_at,
             })
 
@@ -1074,6 +1081,46 @@ class HistoryView(APIView):
 
 class UserSongLikeView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """
+        GET /api/auth/like?song_id=<id> — 取得目前使用者對某首歌的喜歡狀態
+        回傳 is_liked: true / false / null（null 表示尚未設定）
+        """
+        song_id = request.query_params.get('song_id')
+        if song_id is None:
+            return Response({
+                "status": "error",
+                "message": "song_id is required.",
+                "code": "MISSING_SONG_ID",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            song_id_int = int(song_id)
+        except (TypeError, ValueError):
+            return Response({
+                "status": "error",
+                "message": "song_id must be an integer.",
+                "code": "INVALID_SONG_ID",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if not Song.objects.filter(id=song_id_int).exists():
+            return Response({
+                "status": "error",
+                "message": "Song not found.",
+                "code": "SONG_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        like = UserSongLike.objects.filter(user=request.user, song_id=song_id_int).first()
+        is_liked = like.is_liked if like is not None else None
+
+        return Response({
+            "status": "success",
+            "data": {
+                "song_id": song_id_int,
+                "is_liked": is_liked,
+            },
+        }, status=status.HTTP_200_OK)
 
     def post(self, request):
         song_id = request.data.get('song_id')
