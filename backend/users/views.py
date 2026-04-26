@@ -14,6 +14,7 @@ from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.utils.decorators import method_decorator
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.db import transaction
 
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -29,6 +30,8 @@ from .models import (
     PlaylistSong,
     RecommendationBatch,
     RecommendationItem,
+    History,
+    UserSongLike,
 )
 
 logger = logging.getLogger(__name__)
@@ -929,3 +932,175 @@ class SearchSongsView(APIView):
             "status": "success",
             "data": data,
         }, status=status.HTTP_200_OK)
+class HistoryView(APIView):
+    """
+    GET /api/history — 取得播放紀錄列表
+    POST /api/history — 新增播放紀錄
+    """
+    permission_classes = [IsAuthenticated]
+    DEFAULT_LIMIT = 20
+    MAX_LIMIT = 50
+
+    def post(self, request):
+        user = request.user
+
+        song_id = request.data.get('song_id')
+        watch_seconds = request.data.get('watch_seconds')
+        source = request.data.get('source')
+
+        if song_id is None:
+            return Response({
+                "status": "error",
+                "message": "song_id is required.",
+                "code": "MISSING_SONG_ID",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if watch_seconds is None:
+            return Response({
+                "status": "error",
+                "message": "watch_seconds is required.",
+                "code": "MISSING_WATCH_SECONDS",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if source is None or source == '': # source is not None and not empty
+            return Response({
+                "status": "error",
+                "message": "source is required.",
+                "code": "MISSING_SOURCE",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if source not in History.SourceChoices.values:
+            return Response({
+                "status": "error",
+                "message": "Invalid source.",
+                "code": "INVALID_SOURCE",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Song exists check
+        try:
+            song = Song.objects.get(id=song_id)
+        except Song.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Song not found.",
+                "code": "SONG_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            watch_seconds = int(watch_seconds)
+            if watch_seconds < 0:
+                raise ValueError
+        except ValueError:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "watch_seconds must be an integer >= 0",
+                    "code": "INVALID_WATCH_SECONDS",
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        history = History.objects.create(user=user, song=song, watch_seconds=watch_seconds, source=source)
+
+        return Response({
+            "status": "success",
+            "message": "History created.",
+            "data": {
+                "id": history.id,
+                "song_id": history.song_id,
+                "watch_seconds": history.watch_seconds,
+                "source": history.source,
+            },
+        }, status=status.HTTP_201_CREATED)
+
+    def get(self, request):
+        user = request.user
+
+        limit = request.query_params.get('limit', self.DEFAULT_LIMIT)
+        offset = request.query_params.get('offset', 0)
+        song_id = request.query_params.get('song_id')
+        source = request.query_params.get('source')
+
+        try:
+            limit = int(limit)
+            offset = int(offset)
+            if limit <= 0 or offset < 0:
+                raise ValueError
+            limit = min(limit, self.MAX_LIMIT) # 上限保護
+        except ValueError:
+            return Response({
+                "status": "error",
+                "message": "Invalid limit or offset.",
+                "code": "INVALID_LIMIT_OR_OFFSET",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = History.objects.filter(user=user)
+
+        if song_id is not None:
+            queryset = queryset.filter(song_id=song_id)
+
+        if source is not None:
+            if source not in History.SourceChoices.values:
+                return Response({
+                    "status": "error",
+                    "message": "Invalid source.",
+                    "code": "INVALID_SOURCE",
+                }, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(source=source)
+
+        queryset = queryset.order_by('-played_at') # 按 played_at 排序，最新在前
+
+        # 取得總筆數
+        total = queryset.count()
+        queryset = queryset[offset:offset+limit]
+
+        results = [ ]
+        for history in queryset:
+            results.append({
+                "id": history.id,
+                "song_id": history.song_id, # 這裡是直接取 history.song_id
+                "watch_seconds": history.watch_seconds,
+                "source": history.source,
+                "created_at": history.created_at,
+            })
+
+        return Response({
+            "status": "success",
+            "data": results,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }, status=status.HTTP_200_OK)
+
+class UserSongLikeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        song_id = request.data.get('song_id')
+        intent_like = request.data.get('is_like') # 前端傳回來的意圖
+
+        if not isinstance(intent_like, bool):
+            return Response({"status": "error",
+                "message": "is_like must be a boolean.",
+                "code": "INVALID_IS_LIKE",
+            }, status=status.HTTP_400_BAD_REQUEST)
+        if not Song.objects.filter(id=song_id).exists():
+            return Response({"status": "error",
+                "message": "Song not found.",
+                "code": "SONG_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # 使用 transaction.atomic() 來確保操作的原子性
+        with transaction.atomic():
+            existing = UserSongLike.objects.select_for_update().filter(
+                user=request.user,
+                song_id=song_id,
+            ).first()
+            if existing and existing.is_liked == intent_like:
+                existing.delete()
+                return Response({"status": "success", "data": {"is_liked": None}})
+            UserSongLike.objects.update_or_create(
+                user=request.user, song_id=song_id,
+                defaults={'is_liked': intent_like},
+            )
+        return Response({"status": "success", "data": {"is_liked": intent_like}})
