@@ -917,10 +917,11 @@
 
 /* result */
 .friends-search-result-area {
-  min-height: 130px;
+  flex: 1;
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
+  overflow-y: auto;
 }
 
 .searched-user-card {
@@ -1164,6 +1165,48 @@
 
 .playlist-create-body {
   margin-top: 24px;
+}
+
+.playlist-icon-section {
+  margin-top: 28px;
+}
+
+.playlist-icon-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.playlist-icon-option {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  border: 2px solid transparent;
+  background: rgba(93, 107, 214, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  padding: 0;
+}
+
+.playlist-icon-option img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.playlist-icon-option:hover {
+  background: rgba(93, 107, 214, 0.22);
+  transform: translateY(-2px);
+}
+
+.playlist-icon-option.selected {
+  border-color: #1d179a;
+  background: rgba(29, 23, 154, 0.12);
+  box-shadow: 0 0 0 3px rgba(29, 23, 154, 0.15);
 }
 
 .playlist-input-label {
