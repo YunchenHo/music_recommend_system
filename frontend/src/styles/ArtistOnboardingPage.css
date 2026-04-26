@@ -15,6 +15,31 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
 }
 
+.artist-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0;
+}
+
+.artist-refresh-button {
+  flex-shrink: 0;
+  margin-top: 14px;
+  border: 1.5px solid #d97cab;
+  background: transparent;
+  color: #d97cab;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 15px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s ease;
+}
+
+.artist-refresh-button:hover {
+  background: rgba(217, 124, 171, 0.1);
+}
+
 .artist-step {
   margin: 0 0 8px;
   font-size: 14px;

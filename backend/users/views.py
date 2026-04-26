@@ -1007,7 +1007,7 @@ class HistoryView(APIView):
             "message": "History created.",
             "data": {
                 "id": history.id,
-                "song_id": history.song.id,
+                "song_id": history.song_id,
                 "watch_seconds": history.watch_seconds,
                 "source": history.source,
             },
