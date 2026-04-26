@@ -567,6 +567,8 @@ class HistoryView(APIView):
     POST /api/history — 新增播放紀錄
     """
     permission_classes = [IsAuthenticated]
+    DEFAULT_LIMIT = 20
+    MAX_LIMIT = 50
 
     def post(self, request):
         user = request.user
@@ -643,7 +645,7 @@ class HistoryView(APIView):
     def get(self, request):
         user = request.user
 
-        limit = request.query_params.get('limit', 20)
+        limit = request.query_params.get('limit', self.DEFAULT_LIMIT)
         offset = request.query_params.get('offset', 0)
         song_id = request.query_params.get('song_id')
         source = request.query_params.get('source')
@@ -653,6 +655,7 @@ class HistoryView(APIView):
             offset = int(offset)
             if limit <= 0 or offset < 0:
                 raise ValueError
+            limit = min(limit, self.MAX_LIMIT) # 上限保護
         except ValueError:
             return Response({
                 "status": "error",

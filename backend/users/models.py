@@ -194,7 +194,7 @@ class UserSongLike(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='song_likes')
     song = models.ForeignKey(Song, on_delete=models.CASCADE, related_name='liked_by_users')
 
-    is_liked = models.BooleanField(default=False, help_text='True: 喜歡，False: 不喜歡')
+    is_liked = models.BooleanField(help_text='True: 喜歡，False: 不喜歡')
     created_at = models.DateTimeField(auto_now_add=True) # 建立時間
     updated_at = models.DateTimeField(auto_now=True) # 更新時間
 
