@@ -917,10 +917,11 @@
 
 /* result */
 .friends-search-result-area {
-  min-height: 130px;
+  flex: 1;
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
+  overflow-y: auto;
 }
 
 .searched-user-card {
@@ -1166,6 +1167,48 @@
   margin-top: 24px;
 }
 
+.playlist-icon-section {
+  margin-top: 28px;
+}
+
+.playlist-icon-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.playlist-icon-option {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  border: 2px solid transparent;
+  background: rgba(93, 107, 214, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  padding: 0;
+}
+
+.playlist-icon-option img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.playlist-icon-option:hover {
+  background: rgba(93, 107, 214, 0.22);
+  transform: translateY(-2px);
+}
+
+.playlist-icon-option.selected {
+  border-color: #1d179a;
+  background: rgba(29, 23, 154, 0.12);
+  box-shadow: 0 0 0 3px rgba(29, 23, 154, 0.15);
+}
+
 .playlist-input-label {
   display: block;
   margin-bottom: 10px;
@@ -1216,4 +1259,62 @@
 .empty-playlist-item {
   color: #777;
   cursor: default;
+}
+
+.youtube-player-wrap {
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  position: absolute;
+}
+
+.youtube-loading {
+  color: #aaa;
+  font-size: 0.85rem;
+  text-align: center;
+  margin: 8px 0;
+}
+
+.progress-bar-wrap {
+  width: 100%;
+  height: 6px;
+  background: #f0c4d0;
+  border-radius: 999px;
+  cursor: pointer;
+  position: relative;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: #e75480;
+  border-radius: 999px;
+  transition: width 0.4s linear;
+  position: relative;
+}
+
+.progress-bar-fill::after {
+  content: "";
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  background: #e75480;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px #ffd1e8;
+}
+
+.progress-bar-section {
+  width: 80%;
+  margin: 6px auto 0;
+}
+
+.progress-time-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: #e75480;
+  font-weight: 600;
 }

@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import YouTube from "react-youtube"
 import "../styles/HomePage.css"
 import { getMe, getFavorites, addFavorite, removeFavorite, getRecommendations } from "../api/songs"
+import { searchYouTubeVideoId } from "../api/youtube"
 
 // ── 推薦歌曲（從 API 取得）
 
@@ -52,6 +54,18 @@ const FAKE_USERS = [
   },
 ]
 
+const PLAYLIST_ICONS = [
+  "yeah-rabbit.svg",
+  "mifi.svg",
+  "jojo.svg",
+  "egg.svg",
+  "ahhh.svg",
+  "angry_heart.svg",
+  "chicken_nugget.svg",
+  "one_punch.svg",
+]
+
+
 // ─────────────────────────────────────────────────────
 export default function HomePage() {
   // 目前顯示的頁面：'home' | 'search'
@@ -76,6 +90,44 @@ export default function HomePage() {
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
 
+  const [youtubeVideoId, setYoutubeVideoId] = useState(null)
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false)
+  const playerRef = useRef(null)
+
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const progressIntervalRef = useRef(null)
+
+  useEffect(() => {
+    if (isPlaying) {
+      progressIntervalRef.current = setInterval(() => {
+        if (playerRef.current) {
+          setCurrentTime(playerRef.current.getCurrentTime() || 0)
+          setDuration(playerRef.current.getDuration() || 0)
+        }
+      }, 500)
+    } else {
+      clearInterval(progressIntervalRef.current)
+    }
+    return () => clearInterval(progressIntervalRef.current)
+  }, [isPlaying, youtubeVideoId])
+
+  const isDragging = useRef(false)
+  const [dragTime, setDragTime] = useState(null)
+
+  const formatTime = (secs) => {
+    if (!secs || isNaN(secs)) return "0:00"
+    const m = Math.floor(secs / 60)
+    const s = Math.floor(secs % 60)
+    return `${m}:${s.toString().padStart(2, "0")}`
+  }
+
+  const calcSeekTime = (e, el) => {
+    const rect = el.getBoundingClientRect()
+    const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1)
+    return ratio * duration
+  }
+
   const [revisitStart, setRevisitStart] = useState(0)
   const [friendStart, setFriendStart] = useState(0)
 
@@ -98,8 +150,9 @@ export default function HomePage() {
   ])
 
   const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false)
-  const [playlistModalView, setPlaylistModalView] = useState("list") 
+  const [playlistModalView, setPlaylistModalView] = useState("list")
   // "list" | "create"
+  const [selectedPlaylistIcon, setSelectedPlaylistIcon] = useState(PLAYLIST_ICONS[0])
 
   const [newPlaylistName, setNewPlaylistName] = useState("")
   const [playlistNameError, setPlaylistNameError] = useState("")
@@ -203,7 +256,7 @@ export default function HomePage() {
   }, [])
 
   // 播放指定歌曲（切歌時重置 liked/disliked）
-  const handlePlay = (song) => {
+  const handlePlay = async (song) => {
     setCurrentSong(song)
     setIsPlaying(true)
     setLiked(false)
@@ -220,10 +273,34 @@ export default function HomePage() {
         ...filtered,
       ]
     })
+
+    clearInterval(progressIntervalRef.current)
+    playerRef.current = null
+    setYoutubeVideoId(null)
+    setCurrentTime(0)
+    setDuration(0)
+    setIsLoadingVideo(true)
+    try {
+      const videoId = await searchYouTubeVideoId(song.song_title, song.artist_name)
+      setYoutubeVideoId(videoId)
+    } catch (err) {
+      console.error("YouTube 搜尋失敗", err)
+    } finally {
+      setIsLoadingVideo(false)
+    }
   }
 
   // 切換播放 / 暫停
-  const togglePlay = () => setIsPlaying((prev) => !prev)
+  const togglePlay = () => {
+    setIsPlaying((prev) => {
+      if (prev) {
+        playerRef.current?.pauseVideo()
+      } else {
+        playerRef.current?.playVideo()
+      }
+      return !prev
+    })
+  }
 
   // 收藏 / 取消收藏
   const handleToggleSave = async () => {
@@ -261,6 +338,7 @@ export default function HomePage() {
     setIsPlaylistModalOpen(false)
     setPlaylistModalView("list")
     setNewPlaylistName("")
+    setSelectedPlaylistIcon(PLAYLIST_ICONS[0])
     setPlaylistNameError("")
   }
 
@@ -304,6 +382,7 @@ export default function HomePage() {
     const newPlaylist = {
       id: Date.now(),
       name: trimmedName,
+      icon: selectedPlaylistIcon,
       songs: currentSong ? [currentSong] : [],
     }
 
@@ -397,7 +476,7 @@ export default function HomePage() {
                 }
               >
                 <div className="playlist-card-thumb">
-                  <img src="/yeah-rabbit.svg" alt="rabbit" />
+                  <img src={`/album_icon/${playlist.icon || PLAYLIST_ICONS[0]}`} alt={playlist.name} />
                 </div>
                 <div className="playlist-card-info">
                   <span className="playlist-card-name">{playlist.name}</span>
@@ -639,6 +718,47 @@ export default function HomePage() {
 
             </div>
 
+            {/* 進度條 */}
+            <div className="progress-bar-section">
+              <div
+                className="progress-bar-wrap"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  if (!playerRef.current || !duration) return
+                  isDragging.current = true
+                  const bar = e.currentTarget
+                  setDragTime(calcSeekTime(e, bar))
+
+                  const onMove = (ev) => {
+                    setDragTime(calcSeekTime(ev, bar))
+                  }
+                  const onUp = (ev) => {
+                    const t = calcSeekTime(ev, bar)
+                    playerRef.current.seekTo(t)
+                    setCurrentTime(t)
+                    setDragTime(null)
+                    isDragging.current = false
+                    window.removeEventListener("mousemove", onMove)
+                    window.removeEventListener("mouseup", onUp)
+                  }
+                  window.addEventListener("mousemove", onMove)
+                  window.addEventListener("mouseup", onUp)
+                }}
+              >
+                <div
+                  className="progress-bar-fill"
+                  style={{
+                    width: duration ? `${((dragTime ?? currentTime) / duration) * 100}%` : "0%",
+                    transition: dragTime !== null ? "none" : "width 0.4s linear",
+                  }}
+                />
+              </div>
+              <div className="progress-time-row">
+                <span>{formatTime(dragTime ?? currentTime)}</span>
+                <span>{formatTime(duration)}</span>
+              </div>
+            </div>
+
             {/* 播放控制 */}
             <button className="play-btn" onClick={togglePlay} title={isPlaying ? "暫停" : "播放"}>
               <img
@@ -647,6 +767,25 @@ export default function HomePage() {
                 className="play-icon"
               />
             </button>
+
+            {/* YouTube 播放器 */}
+            <div className="youtube-player-wrap">
+              {isLoadingVideo && <p className="youtube-loading">載入中...</p>}
+              {youtubeVideoId && (
+                <YouTube
+                  videoId={youtubeVideoId}
+                  opts={{
+                    width: "100%",
+                    height: "160",
+                    playerVars: { autoplay: 1 },
+                  }}
+                  onReady={(e) => {
+                    playerRef.current = e.target
+                  }}
+                  onEnd={() => setIsPlaying(false)}
+                />
+              )}
+            </div>
           </div>
         )}
       </aside>
@@ -762,7 +901,7 @@ export default function HomePage() {
                       onClick={() => handleAddSongToPlaylist(playlist.id)}
                     >
                       <div className="playlist-modal-item-icon">
-                        <img src="/yeah-rabbit.svg" alt="rabbit" />
+                        <img src={`/album_icon/${playlist.icon || PLAYLIST_ICONS[0]}`} alt={playlist.name} />
                       </div>
 
                       <div className="playlist-modal-item-info">
@@ -829,6 +968,22 @@ export default function HomePage() {
                         {playlistNameError}
                       </span>
                     )}
+                  </div>
+
+                  <div className="playlist-icon-section">
+                    <label className="playlist-input-label">Playlist Icon</label>
+                    <div className="playlist-icon-grid">
+                      {PLAYLIST_ICONS.map((icon) => (
+                        <button
+                          key={icon}
+                          type="button"
+                          className={`playlist-icon-option ${selectedPlaylistIcon === icon ? "selected" : ""}`}
+                          onClick={() => setSelectedPlaylistIcon(icon)}
+                        >
+                          <img src={`/album_icon/${icon}`} alt={icon} />
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="playlist-create-actions">

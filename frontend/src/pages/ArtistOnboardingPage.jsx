@@ -14,6 +14,17 @@ const artistData = {
     { id: 216221, name: "Yoga Lin", image: "/artists/yogalin.jpg" },
   ],
 
+  Chinese_Page2: [
+    { id: 214729, name: "Jeff Chang", image: "/artists/jeffchang.jpg" },
+    { id: 156252, name: "S.H.E", image: "/artists/she.jpg" },
+    { id: 214008, name: "Stefanie Sun", image: "/artists/stefaniesun.jpg" },
+    { id: 216456, name: "Fish Leong", image: "/artists/fishleong.jpg" },
+    { id: 217397, name: "Leehom Wang", image: "/artists/leehomwang.jpg" },
+    { id: 212761, name: "Rene Liu", image: "/artists/reneliu.jpg" },
+    { id: 218879, name: "Tanya Chua", image: "/artists/tanyachua.jpg" },
+    { id: 218950, name: "Elva Hsiao", image: "/artists/elvahsiao.jpg" },
+  ],
+
   English: [
     { id: 175638, name: "Taylor Swift", image: "/artists/taylorswift.jpg" },
     { id: 54966, name: "Ed Sheeran", image: "/artists/edsheeran.jpg" },
@@ -23,6 +34,17 @@ const artistData = {
     { id: 53286, name: "Dua Lipa", image: "/artists/dualipa.jpg" },
     { id: 26702, name: "Bruno Mars", image: "/artists/brunomars.jpg" },
     { id: 102703, name: "Lady Gaga", image: "/artists/ladygaga.jpg" },
+  ],
+
+  English_Page2: [
+    { id: 36938, name: "Coldplay", image: "/artists/coldplay.png" },
+    { id: 96515, name: "Katy Perry", image: "/artists/katyperry.jpg" },
+    { id: 80089, name: "Imagine D.", image: "/artists/imaginedragons.jpg" },
+    { id: 24304, name: "Bon Jovi", image: "/artists/bonjovi.png" },
+    { id: 135900, name: "One Direction", image: "/artists/onedirection.png" },
+    { id: 4663, name: "Adele", image: "/artists/adele.jpg" },
+    { id: 146507, name: "Queen", image: "/artists/queen.png" },
+    { id: 136038, name: "OneRepublic", image: "/artists/onerepublic.png" },
   ],
 
   Japanese: [
@@ -36,6 +58,17 @@ const artistData = {
     { id: 111645, name: "Mamoru Miyano", image: "/artists/mamoru.jpg" },
   ],
 
+  Japanese_Page2: [
+    { id: 15903, name: "Ayumi Hamasaki", image: "/artists/ayumihamasaki.jpg" },
+    { id: 66582, name: "GReeeeN", image: "/artists/greeeeen.jpeg" },
+    { id: 51113, name: "Do As Infinity", image: "/artists/doasinfinity.jpg" },
+    { id: 5591, name: "Ai Otsuka", image: "/artists/aiotsuka.jpg" },
+    { id: 95181, name: "Kalafina", image: "/artists/kalafina.jpg" },
+    { id: 121836, name: "Mika Nakashima", image: "/artists/mikanakashima.jpg" },
+    { id: 188861, name: "Tohoshinki", image: "/artists/tohoshinki.jpg" },
+    { id: 133079, name: "Nogizaka46", image: "/artists/nogizaka46.jpg" },
+  ],
+
   Korean: [
     { id: 128087, name: "NCT 127", image: "/artists/nct127.jpg" },
     { id: 16523, name: "BLACKPINK", image: "/artists/blackpink.jpg" },
@@ -46,6 +79,17 @@ const artistData = {
     { id: 69454, name: "SNSD", image: "/artists/snsd.jpg" },
     { id: 54451, name: "EXO", image: "/artists/exo.jpg" },
   ],
+
+  Korean_Page2: [
+    { id: 16471, name: "TAEYANG", image: "/artists/taeyang.jpg" },
+    { id: 66198, name: "G-DRAGON", image: "/artists/gdragon.jpg" },
+    { id: 207300, name: "f(x)", image: "/artists/fx.jpg" },
+    { id: 3182, name: "AOA", image: "/artists/aoa.jpeg" },
+    { id: 12943, name: "Apink", image: "/artists/apink.jpg" },
+    { id: 147203, name: "ROY KIM", image: "/artists/roykim.jpg" },
+    { id: 16467, name: "BIGBANG", image: "/artists/bigbang.jpg" },
+    { id: 3000, name: "AKMU", image: "/artists/akmu.jpg" },
+  ],
 }
 
 function ArtistOnboardingPage() {
@@ -55,6 +99,7 @@ function ArtistOnboardingPage() {
   const selectedLanguages = location.state?.selectedLanguages || []
   const [currentStep, setCurrentStep] = useState(0)
   const [selectedArtists, setSelectedArtists] = useState({})
+  const [pageIndex, setPageIndex] = useState(0)
 
   useEffect(() => {
     if (selectedLanguages.length === 0) {
@@ -69,8 +114,18 @@ function ArtistOnboardingPage() {
     setSelectedArtists(initialSelections)
     }, [selectedLanguages, navigate])
 
+  useEffect(() => {
+    setPageIndex(0)
+  }, [currentStep])
+
   const currentLanguage = selectedLanguages[currentStep]
-  const artists = artistData[currentLanguage] || []
+  const pageKey = pageIndex === 0 ? currentLanguage : `${currentLanguage}_Page2`
+  const artists = artistData[pageKey] || []
+  const hasPage2 = !!artistData[`${currentLanguage}_Page2`]
+
+  const handleRefresh = () => {
+    setPageIndex((prev) => (prev === 0 ? 1 : 0))
+  }
 
   const toggleArtist = (artistId) => {
     const current = selectedArtists[currentLanguage] || []
@@ -119,14 +174,28 @@ function ArtistOnboardingPage() {
   return (
     <div className="artist-page">
       <div className="artist-panel">
-        <p className="artist-step">
-          Step {currentStep + 1} / {selectedLanguages.length}
-        </p>
+        <div className="artist-header">
+          <div>
+            <p className="artist-step">
+              Step {currentStep + 1} / {selectedLanguages.length}
+            </p>
 
-        <h1 className="artist-title">
-          Pick at least 2 artists you like in{" "}
-          <span>{currentLanguage}</span>
-        </h1>
+            <h1 className="artist-title">
+              Pick at least 2 artists you like in{" "}
+              <span>{currentLanguage}</span>
+            </h1>
+          </div>
+
+          {hasPage2 && (
+            <button
+              type="button"
+              className="artist-refresh-button"
+              onClick={handleRefresh}
+            >
+              ↺ Refresh
+            </button>
+          )}
+        </div>
 
         <p className="artist-subtitle">Selected: {selectedCount} / 2</p>
 
