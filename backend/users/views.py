@@ -12,6 +12,7 @@ from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.utils.decorators import method_decorator
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.db import transaction
 
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -28,6 +29,7 @@ from .models import (
     RecommendationBatch,
     RecommendationItem,
     History,
+    UserSongLike,
 )
 
 logger = logging.getLogger(__name__)
@@ -587,7 +589,7 @@ class HistoryView(APIView):
                 "code": "MISSING_WATCH_SECONDS",
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        if not source : # source is not None and not empty
+        if source is None or source == '': # source is not None and not empty
             return Response({
                 "status": "error",
                 "message": "source is required.",
@@ -672,7 +674,7 @@ class HistoryView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
             queryset = queryset.filter(source=source)
 
-        queryset = queryset.order_by('-created_at') # 按 created_at 排序，最新在前
+        queryset = queryset.order_by('-played_at') # 按 played_at 排序，最新在前
 
         # 取得總筆數
         total = queryset.count()
@@ -682,7 +684,7 @@ class HistoryView(APIView):
         for history in queryset:
             results.append({
                 "id": history.id,
-                "song_id": history.song.id,
+                "song_id": history.song_id, # 這裡是直接取 history.song_id
                 "watch_seconds": history.watch_seconds,
                 "source": history.source,
                 "created_at": history.created_at,
@@ -695,3 +697,36 @@ class HistoryView(APIView):
             "limit": limit,
             "offset": offset,
         }, status=status.HTTP_200_OK)
+
+class UserSongLikeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        song_id = request.data.get('song_id')
+        intent_like = request.data.get('is_like') # 前端傳回來的意圖
+
+        if not isinstance(intent_like, bool):
+            return Response({"status": "error",
+                "message": "is_like must be a boolean.",
+                "code": "INVALID_IS_LIKE",
+            }, status=status.HTTP_400_BAD_REQUEST)
+        if not Song.objects.filter(id=song_id).exists():
+            return Response({"status": "error",
+                "message": "Song not found.",
+                "code": "SONG_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # 使用 transaction.atomic() 來確保操作的原子性
+        with transaction.atomic():
+            existing = UserSongLike.objects.select_for_update().filter(
+                user=request.user,
+                song_id=song_id,
+            ).first()
+            if existing and existing.is_liked == intent_like:
+                existing.delete()
+                return Response({"status": "success", "data": {"is_liked": None}})
+            UserSongLike.objects.update_or_create(
+                user=request.user, song_id=song_id,
+                defaults={'is_liked': intent_like},
+            )
+        return Response({"status": "success", "data": {"is_liked": intent_like}})

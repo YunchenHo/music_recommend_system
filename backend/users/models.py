@@ -178,7 +178,7 @@ class History(models.Model):
     played_at = models.DateTimeField(auto_now_add=True)
     watch_seconds = models.IntegerField()
     # 使用 choices 來嚴格限制傳入的值
-    source = models.CharField(max_length=20, choices=SourceChoices.choices, default=SourceChoices.RECOMMENDATION)
+    source = models.CharField(max_length=20, choices=SourceChoices.choices)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -189,3 +189,26 @@ class History(models.Model):
 
     def __str__(self):
         return f"{self.user.username} 聽了 {self.song.song_title} ({self.watch_seconds}秒)"
+
+class UserSongLike(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='song_likes')
+    song = models.ForeignKey(Song, on_delete=models.CASCADE, related_name='liked_by_users')
+
+    is_liked = models.BooleanField(default=False, help_text='True: 喜歡，False: 不喜歡')
+    created_at = models.DateTimeField(auto_now_add=True) # 建立時間
+    updated_at = models.DateTimeField(auto_now=True) # 更新時間
+
+    # Django 預設的 unique constraint
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'song'], name='unique_user_song_like')
+        ]
+    
+        # 效能加速器：針對「尋找特定用戶的喜歡歌曲」進行優化
+        indexes = [
+            models.Index(fields=['user', 'song', 'is_liked']),
+        ]
+    
+    def __str__(self):
+        status = "likes" if self.is_liked else "dislikes"
+        return f"{self.user.username} {status} {self.song.song_title}"

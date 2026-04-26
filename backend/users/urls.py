@@ -8,6 +8,7 @@ from .views import (
     AuthMeView,
     DevLoginView,
     HistoryView,
+    UserSongLikeView,
 )
 
 urlpatterns = [
@@ -19,4 +20,5 @@ urlpatterns = [
     # Dev-only: 模擬登入（僅 DEBUG=True 時可用）
     path('dev-login', DevLoginView.as_view(), name='dev-login'),
     path('history', HistoryView.as_view(), name='history'),
+    path('like', UserSongLikeView.as_view(), name='like'),
 ]
