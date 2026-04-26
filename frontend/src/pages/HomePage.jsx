@@ -1,6 +1,10 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import "../styles/HomePage.css"
-import { getMe, getFavorites, addFavorite, removeFavorite, getRecommendations } from "../api/songs"
+import {
+  getMe, getFavorites, addFavorite, removeFavorite, getRecommendations,
+  getPlaylists, createPlaylist, getPlaylistSongs, addSongToPlaylist,
+  searchSongs,
+} from "../api/songs"
 
 // ── 推薦歌曲（從 API 取得）
 
@@ -92,10 +96,9 @@ export default function HomePage() {
     { id: 103, username: "雅婷", profile_picture: null },
   ])
 
-  const [customPlaylists, setCustomPlaylists] = useState([
-    { id: 1, name: "Sad Songs", songs: [] },
-    { id: 2, name: "Party Songs", songs: [] },
-  ])
+  const [customPlaylists, setCustomPlaylists] = useState([])
+  // Each playlist: { id, playlist_name, song_count, songs: [...] | null }
+  // songs 為 null 表示尚未載入（lazy load）
 
   const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false)
   const [playlistModalView, setPlaylistModalView] = useState("list") 
@@ -110,6 +113,12 @@ export default function HomePage() {
   const [user, setUser] = useState({ nickname: "", profilePicture: null })
   const [favorites, setFavorites] = useState([])   // [{ id, song_title, artist_name }]
   const [recommendations, setRecommendations] = useState([])  // [{ rank, id, song_title, artist_name, ... }]
+
+  // ── 搜尋 ──
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchResults, setSearchResults] = useState([])
+  const [isSearching, setIsSearching] = useState(false)
+  const searchTimerRef = useRef(null)
 
   // 收藏狀態由 favorites 清單推導（不需要額外 state）
   const isSaved = currentSong ? favorites.some((f) => f.id === currentSong.id) : false
@@ -187,7 +196,7 @@ export default function HomePage() {
     closeFriendsModal()
   }
 
-  // 頁面載入時取得用戶資訊與收藏清單
+  // 頁面載入時取得用戶資訊、收藏清單、推薦歌曲、自訂清單
   useEffect(() => {
     getMe()
       .then((data) => setUser({ nickname: data.username, profilePicture: data.profile_picture || null }))
@@ -199,6 +208,14 @@ export default function HomePage() {
 
     getRecommendations()
       .then((data) => setRecommendations(data))
+      .catch(console.error)
+
+    getPlaylists()
+      .then((data) =>
+        setCustomPlaylists(
+          data.map((p) => ({ ...p, songs: null }))
+        )
+      )
       .catch(console.error)
   }, [])
 
@@ -264,27 +281,30 @@ export default function HomePage() {
     setPlaylistNameError("")
   }
 
-  const handleAddSongToPlaylist = (playlistId) => {
+  const handleAddSongToPlaylist = async (playlistId) => {
     if (!currentSong) return
 
-    setCustomPlaylists((prev) =>
-      prev.map((playlist) => {
-        if (playlist.id !== playlistId) return playlist
-
-        const alreadyExists = playlist.songs.some((song) => song.id === currentSong.id)
-        if (alreadyExists) return playlist
-
-        return {
-          ...playlist,
-          songs: [...playlist.songs, currentSong],
-        }
-      })
-    )
-
-    closePlaylistModal()
+    try {
+      await addSongToPlaylist(playlistId, currentSong.id)
+      // 更新 local state 的 song_count
+      setCustomPlaylists((prev) =>
+        prev.map((p) => {
+          if (p.id !== playlistId) return p
+          const newSongs = p.songs
+            ? [...p.songs, currentSong]
+            : null
+          return { ...p, song_count: p.song_count + 1, songs: newSongs }
+        })
+      )
+      closePlaylistModal()
+    } catch (err) {
+      // 409 或 400 表示歌已在清單中
+      console.error("加入清單失敗", err)
+      closePlaylistModal()
+    }
   }
 
-  const handleCreatePlaylist = () => {
+  const handleCreatePlaylist = async () => {
     const trimmedName = newPlaylistName.trim()
 
     if (!trimmedName) {
@@ -293,7 +313,7 @@ export default function HomePage() {
     }
 
     const duplicated = customPlaylists.some(
-      (playlist) => playlist.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      (playlist) => playlist.playlist_name.trim().toLowerCase() === trimmedName.toLowerCase()
     )
 
     if (duplicated) {
@@ -301,15 +321,66 @@ export default function HomePage() {
       return
     }
 
-    const newPlaylist = {
-      id: Date.now(),
-      name: trimmedName,
-      songs: currentSong ? [currentSong] : [],
+    try {
+      const newPlaylist = await createPlaylist(trimmedName)
+      setCustomPlaylists((prev) => [...prev, { ...newPlaylist, songs: null }])
+      closePlaylistModal()
+    } catch (err) {
+      console.error("建立清單失敗", err)
+      setPlaylistNameError("Failed to create playlist")
+    }
+  }
+
+  // 展開自訂清單時 lazy load 歌曲
+  const handleToggleCustomPlaylist = async (playlistId) => {
+    if (openCustomPlaylistId === playlistId) {
+      setOpenCustomPlaylistId(null)
+      return
     }
 
-    setCustomPlaylists((prev) => [...prev, newPlaylist])
-    closePlaylistModal()
+    setOpenCustomPlaylistId(playlistId)
+
+    // 如果 songs 尚未載入，從 API 取得
+    const playlist = customPlaylists.find((p) => p.id === playlistId)
+    if (playlist && playlist.songs === null) {
+      try {
+        const songs = await getPlaylistSongs(playlistId)
+        setCustomPlaylists((prev) =>
+          prev.map((p) => (p.id === playlistId ? { ...p, songs } : p))
+        )
+      } catch (err) {
+        console.error("載入清單歌曲失敗", err)
+      }
+    }
   }
+
+  // 搜尋（debounce 300ms）
+  const handleSearchChange = useCallback((value) => {
+    setSearchQuery(value)
+
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current)
+    }
+
+    if (!value.trim()) {
+      setSearchResults([])
+      setIsSearching(false)
+      return
+    }
+
+    setIsSearching(true)
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await searchSongs(value.trim())
+        setSearchResults(results)
+      } catch (err) {
+        console.error("搜尋失敗", err)
+        setSearchResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    }, 300)
+  }, [])
 
   return (
     <div className="home-page">
@@ -390,19 +461,15 @@ export default function HomePage() {
             <div key={playlist.id}>
               <button
                 className={`playlist-card ${openCustomPlaylistId === playlist.id ? "open" : ""}`}
-                onClick={() =>
-                  setOpenCustomPlaylistId((prev) =>
-                    prev === playlist.id ? null : playlist.id
-                  )
-                }
+                onClick={() => handleToggleCustomPlaylist(playlist.id)}
               >
                 <div className="playlist-card-thumb">
                   <img src="/yeah-rabbit.svg" alt="rabbit" />
                 </div>
                 <div className="playlist-card-info">
-                  <span className="playlist-card-name">{playlist.name}</span>
+                  <span className="playlist-card-name">{playlist.playlist_name}</span>
                   <span className="playlist-card-meta">
-                    播放清單 • {playlist.songs.length} 首歌曲
+                    播放清單 • {playlist.song_count} 首歌曲
                   </span>
                 </div>
                 <span className="playlist-card-chevron">
@@ -412,7 +479,9 @@ export default function HomePage() {
 
               {openCustomPlaylistId === playlist.id && (
                 <ul className="playlist">
-                  {playlist.songs.length > 0 ? (
+                  {playlist.songs === null ? (
+                    <li className="playlist-item empty-playlist-item">載入中...</li>
+                  ) : playlist.songs.length > 0 ? (
                     playlist.songs.map((song) => (
                       <li
                         key={song.id}
@@ -558,7 +627,7 @@ export default function HomePage() {
             </section>
           )}
 
-          {/* Search 視圖：假 UI（B 負責）*/}
+          {/* Search 視圖 */}
           {view === "search" && (
             <section className="search-view">
               <div className="search-bar-wrap">
@@ -566,12 +635,40 @@ export default function HomePage() {
                   className="search-input"
                   type="text"
                   placeholder="搜尋歌曲、藝人..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                 />
                 <button className="search-btn">
                   <img src="/search.svg" alt="search" />
                 </button>
               </div>
-              <p className="search-hint">輸入關鍵字開始搜尋</p>
+
+              {!searchQuery.trim() && !isSearching && searchResults.length === 0 && (
+                <p className="search-hint">輸入關鍵字開始搜尋</p>
+              )}
+
+              {isSearching && (
+                <p className="search-hint">搜尋中...</p>
+              )}
+
+              {!isSearching && searchQuery.trim() && searchResults.length === 0 && (
+                <p className="search-hint">找不到相關結果</p>
+              )}
+
+              {searchResults.length > 0 && (
+                <div className="search-results">
+                  {searchResults.map((song) => (
+                    <div
+                      key={song.id}
+                      className={`song-card ${currentSong?.id === song.id ? "active" : ""}`}
+                      onClick={() => handlePlay(song)}
+                    >
+                      <p className="song-card-title">{song.song_title}</p>
+                      <p className="song-card-artist">{song.artist_name}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
@@ -766,9 +863,9 @@ export default function HomePage() {
                       </div>
 
                       <div className="playlist-modal-item-info">
-                        <span className="playlist-modal-item-name">{playlist.name}</span>
+                        <span className="playlist-modal-item-name">{playlist.playlist_name}</span>
                         <span className="playlist-modal-item-count">
-                          {playlist.songs.length} 首歌曲
+                          {playlist.song_count} 首歌曲
                         </span>
                       </div>
                     </button>

@@ -560,6 +560,19 @@
   margin-top: 40px;
 }
 */
+
+.search-hint {
+  color: var(--text-mid);
+  font-size: 0.95rem;
+  text-align: center;
+  margin-top: 40px;
+}
+
+.search-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
 /*
 .action-btn-new {
   width: 38px;

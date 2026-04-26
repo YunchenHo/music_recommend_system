@@ -1,0 +1,264 @@
+### ===========================================
+### Music Recommend System — Playlist & Search API 測試
+### ===========================================
+### 使用方式：VS Code 安裝 REST Client 套件
+### 按每個請求上方的 "Send Request" 即可執行
+###
+### 測試流程：
+### 1. 先執行 dev-login 取得 session
+### 2. 從 response header Set-Cookie 拿到 sessionid 和 csrftoken
+### 3. 填入下方的變數
+### 4. 依序測試各 API
+### ===========================================
+
+### 變數設定（從 dev-login 回傳的 Set-Cookie 取得後填入）
+@host = http://localhost:8000
+@sessionid = 932g8c0jyrgbm32uedcbq2pn4j3fovh5
+@csrftoken = 9iKFtwnNYS8XuxVxQK5cu6MuJlLjTpXi
+
+### -------------------------------------------
+### 1. 模擬登入（Dev Only, DEBUG=True）
+### 執行後從 Response Headers 的 Set-Cookie 取得 sessionid 和 csrftoken
+### -------------------------------------------
+POST {{host}}/api/auth/dev-login
+Content-Type: application/json
+
+{
+  "username": "testuser"
+}
+
+### ===========================================
+### Playlist CRUD 測試
+### ===========================================
+
+### -------------------------------------------
+### 2. 列出所有清單（一開始可能只有 archive 或空的）
+### -------------------------------------------
+GET {{host}}/api/playlists/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 3. 建立新清單
+### -------------------------------------------
+POST {{host}}/api/playlists/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{
+  "playlist_name": "我的歌單"
+}
+
+### -------------------------------------------
+### 4. 建立第二個清單
+### -------------------------------------------
+POST {{host}}/api/playlists/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{
+  "playlist_name": "運動音樂"
+}
+
+### -------------------------------------------
+### 5. 再次列出所有清單（應該看到 archive + 兩個新清單）
+### -------------------------------------------
+GET {{host}}/api/playlists/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 6. 修改清單名稱（把 playlist_id 換成步驟 4 回傳的實際 id）
+### -------------------------------------------
+PATCH {{host}}/api/playlists/3/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{
+  "playlist_name": "讀書音樂"
+}
+
+### -------------------------------------------
+### 7. 建立名為 archive 的清單（應該回 400 被拒絕）
+### -------------------------------------------
+POST {{host}}/api/playlists/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{
+  "playlist_name": "archive"
+}
+
+### -------------------------------------------
+### 8. 建立空名稱的清單（應該回 400）
+### -------------------------------------------
+POST {{host}}/api/playlists/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{
+  "playlist_name": ""
+}
+
+### ===========================================
+### Playlist Songs 測試
+### ===========================================
+
+### -------------------------------------------
+### 9. 加歌到清單（把 playlist_id 換成實際的 id）
+### -------------------------------------------
+POST {{host}}/api/playlists/3/songs/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{
+  "song_id": 523020
+}
+
+### -------------------------------------------
+### 10. 再加一首歌
+### -------------------------------------------
+POST {{host}}/api/playlists/3/songs/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{
+  "song_id": 1867000
+}
+
+### -------------------------------------------
+### 11. 重複加同一首歌（應該回 400）
+### -------------------------------------------
+POST {{host}}/api/playlists/3/songs/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{
+  "song_id": 523020
+}
+
+### -------------------------------------------
+### 12. 加不存在的歌（應該回 404）
+### -------------------------------------------
+POST {{host}}/api/playlists/3/songs/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{
+  "song_id": 99999999
+}
+
+### -------------------------------------------
+### 13. 列出清單內歌曲（應該有 2 首）
+### -------------------------------------------
+GET {{host}}/api/playlists/3/songs/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 14. 從清單移除一首歌
+### -------------------------------------------
+DELETE {{host}}/api/playlists/3/songs/523020/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+
+### -------------------------------------------
+### 15. 列出清單內歌曲（應該剩 1 首）
+### -------------------------------------------
+GET {{host}}/api/playlists/3/songs/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 16. 移除不在清單中的歌（應該回 404）
+### -------------------------------------------
+DELETE {{host}}/api/playlists/3/songs/99999999/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+
+### ===========================================
+### 刪除清單測試
+### ===========================================
+
+### -------------------------------------------
+### 17. 刪除 archive（應該回 403 被拒絕，把 id 換成 archive 的實際 id）
+### -------------------------------------------
+DELETE {{host}}/api/playlists/1/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+
+### -------------------------------------------
+### 18. 刪除自訂清單（把 id 換成步驟 4 建立的清單 id）
+### -------------------------------------------
+DELETE {{host}}/api/playlists/4/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+
+### -------------------------------------------
+### 19. 刪除不存在的清單（應該回 404）
+### -------------------------------------------
+DELETE {{host}}/api/playlists/99999/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+
+### -------------------------------------------
+### 20. 修改 archive 名稱（應該回 403 被拒絕）
+### -------------------------------------------
+PATCH {{host}}/api/playlists/1/
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{
+  "playlist_name": "改名試試"
+}
+
+### ===========================================
+### Search 測試
+### ===========================================
+
+### -------------------------------------------
+### 21. 搜尋中文歌
+### -------------------------------------------
+GET {{host}}/api/songs/search?q=周杰倫
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 22. 搜尋英文歌
+### -------------------------------------------
+GET {{host}}/api/songs/search?q=love
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 23. 搜尋韓文歌
+### -------------------------------------------
+GET {{host}}/api/songs/search?q=BTS
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 24. 搜尋日文歌
+### -------------------------------------------
+GET {{host}}/api/songs/search?q=米津
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 25. 空的搜尋（應該回 400）
+### -------------------------------------------
+GET {{host}}/api/songs/search?q=
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 26. 沒有 q 參數（應該回 400）
+### -------------------------------------------
+GET {{host}}/api/songs/search
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 27. 未登入測試（不帶 cookie，應該回 403）
+### -------------------------------------------
+GET {{host}}/api/playlists/
