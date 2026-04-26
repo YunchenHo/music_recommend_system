@@ -36,3 +36,55 @@ export async function getSongDetail(songId) {
   const { data } = await api.get(`/api/songs/${songId}`)
   return data.data  // { id, song_title, artist_name, album_name, language, song_image, is_favorited }
 }
+
+// ── Playlist API ─────────────────────────────────────
+
+/** GET /api/playlists/ — 取得使用者自訂清單（不含 archive） */
+export async function getPlaylists() {
+  const { data } = await api.get("/api/playlists/")
+  return data.data  // [{ id, playlist_name, song_count, created_at, updated_at }, ...]
+}
+
+/** POST /api/playlists/ — 建立新清單 */
+export async function createPlaylist(playlistName) {
+  const { data } = await api.post("/api/playlists/", { playlist_name: playlistName })
+  return data.data  // { id, playlist_name, song_count, created_at, updated_at }
+}
+
+/** PATCH /api/playlists/<id>/ — 修改清單名稱 */
+export async function updatePlaylist(playlistId, playlistName) {
+  const { data } = await api.patch(`/api/playlists/${playlistId}/`, { playlist_name: playlistName })
+  return data.data  // { id, playlist_name }
+}
+
+/** DELETE /api/playlists/<id>/ — 刪除清單 */
+export async function deletePlaylist(playlistId) {
+  const { data } = await api.delete(`/api/playlists/${playlistId}/`)
+  return data
+}
+
+/** GET /api/playlists/<id>/songs/ — 取得清單內歌曲 */
+export async function getPlaylistSongs(playlistId) {
+  const { data } = await api.get(`/api/playlists/${playlistId}/songs/`)
+  return data.data  // [{ id, song_title, artist_name, song_image, album_name, added_at }, ...]
+}
+
+/** POST /api/playlists/<id>/songs/ — 加歌到清單 */
+export async function addSongToPlaylist(playlistId, songId) {
+  const { data } = await api.post(`/api/playlists/${playlistId}/songs/`, { song_id: songId })
+  return data
+}
+
+/** DELETE /api/playlists/<id>/songs/<song_id>/ — 從清單移除歌曲 */
+export async function removeSongFromPlaylist(playlistId, songId) {
+  const { data } = await api.delete(`/api/playlists/${playlistId}/songs/${songId}/`)
+  return data
+}
+
+// ── Search API ───────────────────────────────────────
+
+/** GET /api/songs/search?q=<query> — 搜尋歌曲 */
+export async function searchSongs(query) {
+  const { data } = await api.get("/api/songs/search", { params: { q: query } })
+  return data.data  // [{ id, song_title, artist_name, album_name, song_image, language }, ...]
+}
