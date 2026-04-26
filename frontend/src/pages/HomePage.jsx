@@ -401,7 +401,17 @@ export default function HomePage() {
 
     try {
       const newPlaylist = await createPlaylist(trimmedName)
-      setCustomPlaylists((prev) => [...prev, { ...newPlaylist, icon: selectedPlaylistIcon, songs: null }])
+      if (currentSong) {
+        await addSongToPlaylist(newPlaylist.id, currentSong.id)
+        setCustomPlaylists((prev) => [...prev, {
+          ...newPlaylist, icon: selectedPlaylistIcon,
+          song_count: 1, songs: [currentSong],
+        }])
+      } else {
+        setCustomPlaylists((prev) => [...prev, {
+          ...newPlaylist, icon: selectedPlaylistIcon, songs: null,
+        }])
+      }
       closePlaylistModal()
     } catch (err) {
       console.error("建立清單失敗", err)
