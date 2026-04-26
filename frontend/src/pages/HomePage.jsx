@@ -7,6 +7,8 @@ import {
   searchSongs,
 } from "../api/songs"
 import { searchYouTubeVideoId } from "../api/youtube"
+import { getHistory, createHistory, HISTORY_SOURCE } from "../api/history"
+import { toggleLike, getLikeStatus } from "../api/likes"
 
 // ── 推薦歌曲（從 API 取得）
 
@@ -88,14 +90,14 @@ export default function HomePage() {
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false)
 
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
-  const [historySongs, setHistorySongs] = useState([
-    { id: 9001, song_title: "Let It Go", artist_name: "Elsa" },
-    { id: 9002, song_title: "Sorry", artist_name: "Justin Bieber" },
-    { id: 9003, song_title: "Flowers", artist_name: "Miley Cyrus" },
-  ])
+  // historySongs: [{ id, song_title, artist_name }]，由後端 history API 載入
+  const [historySongs, setHistorySongs] = useState([])
 
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
+
+  // 追蹤「目前正在播放」的歌曲與來源，切歌/結束時用來送 history
+  const playbackRef = useRef({ song: null, source: null })
 
   const [youtubeVideoId, setYoutubeVideoId] = useState(null)
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
@@ -252,7 +254,7 @@ export default function HomePage() {
     closeFriendsModal()
   }
 
-  // 頁面載入時取得用戶資訊、收藏清單、推薦歌曲、自訂清單
+  // 頁面載入時取得用戶資訊、收藏清單、推薦歌曲、自訂清單、歷史紀錄
   useEffect(() => {
     getMe()
       .then((data) => setUser({ nickname: data.username, profilePicture: data.profile_picture || null }))
@@ -273,14 +275,77 @@ export default function HomePage() {
         )
       )
       .catch(console.error)
+
+    // 載入歷史紀錄（僅取最近 20 筆）；後端已直接回傳 song_title/artist_name 等
+    getHistory({ limit: 20 })
+      .then((resp) => {
+        const items = resp?.data ?? []
+        // 後端已依 played_at desc 排序，但同首歌可能多筆 → 在前端去重保留最新
+        const seen = new Set()
+        const deduped = []
+        for (const it of items) {
+          if (seen.has(it.song_id)) continue
+          seen.add(it.song_id)
+          deduped.push({
+            id: it.song_id,
+            song_title: it.song_title,
+            artist_name: it.artist_name,
+            song_image: it.song_image,
+            album_name: it.album_name,
+            language: it.language,
+          })
+        }
+        setHistorySongs(deduped)
+      })
+      .catch(console.error)
+  }, [])
+
+  // 把目前正在播放的那首歌「實際聽到的秒數」送進後端 history
+  // 在切歌、結束、卸載時呼叫
+  const flushCurrentHistory = useCallback(() => {
+    const { song, source } = playbackRef.current
+    if (!song || !source) return
+    let seconds = 0
+    try {
+      seconds = playerRef.current?.getCurrentTime?.() ?? 0
+    } catch {
+      seconds = 0
+    }
+    // 沒實際播放就不送，避免污染資料
+    if (!seconds || seconds < 1) {
+      playbackRef.current = { song: null, source: null }
+      return
+    }
+    createHistory({
+      songId: song.id,
+      watchSeconds: seconds,
+      source,
+    }).catch((err) => console.error("送出 history 失敗", err))
+    playbackRef.current = { song: null, source: null }
   }, [])
 
   // 播放指定歌曲（切歌時重置 liked/disliked）
-  const handlePlay = async (song) => {
+  // source: HISTORY_SOURCE.* — 點擊來源，會寫入後端 history
+  const handlePlay = async (song, source = HISTORY_SOURCE.RECOMMENDATION) => {
+    // 切歌前先把上一首實際聽到的秒數送出
+    flushCurrentHistory()
+
     setCurrentSong(song)
     setIsPlaying(true)
     setLiked(false)
     setDisliked(false)
+
+    // 標記新的目前播放
+    playbackRef.current = { song, source }
+
+    // 從後端取得這首歌的喜歡 / 不喜歡狀態，還原 UI
+    getLikeStatus(song.id)
+      .then((resp) => {
+        const isLiked = resp?.data?.is_liked
+        setLiked(isLiked === true)
+        setDisliked(isLiked === false)
+      })
+      .catch((err) => console.error("取得 like 狀態失敗", err))
 
     setHistorySongs((prev) => {
       const filtered = prev.filter((item) => item.id !== song.id)
@@ -307,6 +372,27 @@ export default function HomePage() {
       console.error("YouTube 搜尋失敗", err)
     } finally {
       setIsLoadingVideo(false)
+    }
+  }
+
+  // 卸載時送出最後一首的 history
+  useEffect(() => {
+    return () => {
+      flushCurrentHistory()
+    }
+  }, [flushCurrentHistory])
+
+  // 喜歡 / 不喜歡：呼叫後端 toggleLike，根據回傳更新 UI
+  const handleToggleLike = async (intentLike) => {
+    if (!currentSong) return
+    try {
+      const resp = await toggleLike(currentSong.id, intentLike)
+      const isLiked = resp?.data?.is_liked
+      // is_liked: true / false / null（取消）
+      setLiked(isLiked === true)
+      setDisliked(isLiked === false)
+    } catch (err) {
+      console.error("toggle like 失敗", err)
     }
   }
 
@@ -509,7 +595,7 @@ export default function HomePage() {
                 <li
                   key={song.id}
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
-                  onClick={() => handlePlay(song)}
+                  onClick={() => handlePlay(song, HISTORY_SOURCE.PLAYLIST)}
                 >
                   {song.song_title}
                 </li>
@@ -541,7 +627,7 @@ export default function HomePage() {
                 <li
                   key={song.id}
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
-                  onClick={() => handlePlay(song)}
+                  onClick={() => handlePlay(song, HISTORY_SOURCE.PLAYLIST)}
                 >
                   {song.song_title}
                 </li>
@@ -577,7 +663,7 @@ export default function HomePage() {
                       <li
                         key={song.id}
                         className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
-                        onClick={() => handlePlay(song)}
+                        onClick={() => handlePlay(song, HISTORY_SOURCE.PLAYLIST)}
                       >
                         {song.song_title}
                       </li>
@@ -647,7 +733,7 @@ export default function HomePage() {
                   <div
                     key={song.id}
                     className={`song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                    onClick={() => handlePlay(song)}
+                    onClick={() => handlePlay(song, HISTORY_SOURCE.RECOMMENDATION)}
                   >
                     <p className="song-card-title">{song.song_title}</p>
                     <p className="song-card-artist">{song.artist_name}</p>
@@ -669,7 +755,7 @@ export default function HomePage() {
                     <div
                       key={song.id}
                       className={`small-song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                      onClick={() => handlePlay(song)}
+                      onClick={() => handlePlay(song, HISTORY_SOURCE.RECOMMENDATION)}
                     >
                       <p className="small-song-title">{song.song_title}</p>
                       <p className="small-song-artist">{song.artist_name}</p>
@@ -693,11 +779,14 @@ export default function HomePage() {
                       key={item.id}
                       className="friend-card"
                       onClick={() => {
-                        handlePlay({
-                          id: item.id,
-                          song_title: item.song_title,
-                          artist_name: item.artist_name,
-                        })
+                        handlePlay(
+                          {
+                            id: item.id,
+                            song_title: item.song_title,
+                            artist_name: item.artist_name,
+                          },
+                          HISTORY_SOURCE.FRIEND,
+                        )
                       }}
                     >
                       <p className="friend-name">{item.friend_name}</p>
@@ -752,7 +841,7 @@ export default function HomePage() {
                     <div
                       key={song.id}
                       className={`song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                      onClick={() => handlePlay(song)}
+                      onClick={() => handlePlay(song, HISTORY_SOURCE.SEARCH)}
                     >
                       <p className="song-card-title">{song.song_title}</p>
                       <p className="song-card-artist">{song.artist_name}</p>
@@ -788,10 +877,7 @@ export default function HomePage() {
             <div className="player-actions">
               <button
                 className={`action-btn-new ${liked ? "active" : ""}`}
-                onClick={() => {
-                  setLiked(prev => !prev)
-                  setDisliked(false)  
-                }}
+                onClick={() => handleToggleLike(true)}
                 title="喜歡"
               >
                 <img src="/good.svg" alt="like" className="good-icon" />
@@ -799,10 +885,7 @@ export default function HomePage() {
 
               <button
                 className={`action-btn-new ${disliked ? "active" : ""}`}
-                onClick={() => {
-                  setDisliked(prev => !prev)
-                  setLiked(false)   
-                }}
+                onClick={() => handleToggleLike(false)}
                 title="不喜歡"
               >
                 <img src="/bad.svg" alt="dislike" className="bad-icon" />
@@ -891,7 +974,10 @@ export default function HomePage() {
                   onReady={(e) => {
                     playerRef.current = e.target
                   }}
-                  onEnd={() => setIsPlaying(false)}
+                  onEnd={() => {
+                    flushCurrentHistory()
+                    setIsPlaying(false)
+                  }}
                 />
               )}
             </div>
