@@ -67,6 +67,9 @@ const PLAYLIST_ICONS = [
   "angry_heart.svg",
   "chicken_nugget.svg",
   "one_punch.svg",
+  "cutie.svg",
+  "star.svg",
+  "tail.svg",
 ]
 
 
