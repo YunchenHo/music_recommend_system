@@ -1079,6 +1079,68 @@ class HistoryView(APIView):
             "offset": offset,
         }, status=status.HTTP_200_OK)
 
+class HistoryDetailView(APIView):
+    """
+    PATCH /api/auth/history/<pk> — 更新某筆歷史紀錄的 watch_seconds
+    僅允許更新「本人建立」的紀錄。
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        try:
+            history = History.objects.get(pk=pk)
+        except History.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "History not found.",
+                "code": "HISTORY_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        if history.user_id != request.user.id:
+            # 不是本人的紀錄一律 404，避免洩漏 id 是否存在
+            return Response({
+                "status": "error",
+                "message": "History not found.",
+                "code": "HISTORY_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        watch_seconds = request.data.get('watch_seconds')
+        if watch_seconds is None:
+            return Response({
+                "status": "error",
+                "message": "watch_seconds is required.",
+                "code": "MISSING_WATCH_SECONDS",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            watch_seconds = int(watch_seconds)
+            if watch_seconds < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return Response({
+                "status": "error",
+                "message": "watch_seconds must be an integer >= 0",
+                "code": "INVALID_WATCH_SECONDS",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 單調遞增保護：避免 race condition 導致較新的小值蓋掉較大的值
+        # （例如重新整理時末段 PATCH 比中段 PATCH 晚抵達）
+        if watch_seconds > history.watch_seconds:
+            history.watch_seconds = watch_seconds
+            history.save(update_fields=['watch_seconds'])
+
+        return Response({
+            "status": "success",
+            "message": "History updated.",
+            "data": {
+                "id": history.id,
+                "song_id": history.song_id,
+                "watch_seconds": history.watch_seconds,
+                "source": history.source,
+            },
+        }, status=status.HTTP_200_OK)
+
+
 class UserSongLikeView(APIView):
     permission_classes = [IsAuthenticated]
 

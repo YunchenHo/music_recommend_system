@@ -10,6 +10,11 @@
 
 ## 一、最終 API 規格
 
+> ⚠️ **重要設計決策**：點歌時就會**立刻** POST 一筆 `watch_seconds=0` 的紀錄，
+> 切歌 / 結束時改用 PATCH 更新該筆的 `watch_seconds`。
+> 這樣即使使用者馬上重新整理也不會掉資料（保證最後一首在歷史紀錄裡）。
+> 詳見〈三、(3) 為什麼「點歌就立刻 POST」〉。
+
 ### 1. `POST /api/auth/history` — 新增播放紀錄
 
 **Body**
@@ -31,6 +36,30 @@
 ```
 
 **錯誤碼**：`MISSING_SONG_ID` / `MISSING_WATCH_SECONDS` / `MISSING_SOURCE` / `INVALID_SOURCE` / `SONG_NOT_FOUND` / `INVALID_WATCH_SECONDS`
+
+### 1.5 `PATCH /api/auth/history/<id>` — 更新某筆紀錄的 watch_seconds
+
+僅允許更新「本人建立」的紀錄；非本人或不存在皆回 404 `HISTORY_NOT_FOUND`。
+
+**Body**
+
+| 欄位 | 型別 | 必填 | 說明 |
+| --- | --- | --- | --- |
+| `watch_seconds` | int (≥ 0) | ✅ | 要更新到的播放秒數 |
+
+**Response (200)**
+
+```json
+{
+  "status": "success",
+  "message": "History updated.",
+  "data": { "id": 123, "song_id": 7, "watch_seconds": 84, "source": "SEARCH" }
+}
+```
+
+**單調遞增保護**：傳入的 `watch_seconds` ≤ 現有值時不會覆蓋，避免「中段 PATCH 比末段 PATCH 晚到」的 race condition。
+
+**錯誤碼**：`HISTORY_NOT_FOUND` / `MISSING_WATCH_SECONDS` / `INVALID_WATCH_SECONDS`
 
 ### 2. `GET /api/auth/history` — 取歷史紀錄（含歌曲 metadata）
 
@@ -123,7 +152,40 @@ for history in queryset:
 
 > 改動前只回傳 `song_id`，前端要再逐筆呼叫 `GET /api/songs/<id>` 取詳情。
 
-#### (2) `UserSongLikeView` — 新增 `get()` 取單首 like 狀態
+#### (2) 新增 `HistoryDetailView` — 處理 `PATCH /api/auth/history/<pk>`
+
+```python
+class HistoryDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        try:
+            history = History.objects.get(pk=pk)
+        except History.DoesNotExist:
+            return Response({...HISTORY_NOT_FOUND...}, status=404)
+
+        # 不是本人的紀錄一律 404，避免洩漏 id 是否存在
+        if history.user_id != request.user.id:
+            return Response({...HISTORY_NOT_FOUND...}, status=404)
+
+        watch_seconds = request.data.get('watch_seconds')
+        # 驗證 必填 / int / >= 0 ...
+
+        # 單調遞增保護
+        if watch_seconds > history.watch_seconds:
+            history.watch_seconds = watch_seconds
+            history.save(update_fields=['watch_seconds'])
+
+        return Response({"status": "success", ...}, status=200)
+```
+
+**`backend/users/urls.py`** 對應加入：
+
+```python
+path('history/<int:pk>', HistoryDetailView.as_view(), name='history-detail'),
+```
+
+#### (3) `UserSongLikeView` — 新增 `get()` 取單首 like 狀態
 
 ```python
 class UserSongLikeView(APIView):
@@ -188,9 +250,16 @@ export async function createHistory({ songId, watchSeconds, source }) {
   })
   return data
 }
+
+export async function updateHistory(historyId, watchSeconds) {
+  const { data } = await api.patch(`/api/auth/history/${historyId}`, {
+    watch_seconds: Math.max(0, Math.floor(watchSeconds || 0)),
+  })
+  return data
+}
 ```
 
-`createHistory` 對 `watchSeconds` 做了防呆（`Math.floor` + 不為負）以對應後端「整數且 ≥ 0」要求。
+`createHistory` / `updateHistory` 都對 `watchSeconds` 做防呆（`Math.floor` + 不為負）。
 
 ### (2) 新增 `frontend/src/api/likes.js`
 
@@ -216,7 +285,7 @@ export async function toggleLike(songId, intentLike) {
 #### 新增 import
 
 ```js
-import { getHistory, createHistory, HISTORY_SOURCE } from "../api/history"
+import { getHistory, createHistory, updateHistory, HISTORY_SOURCE } from "../api/history"
 import { toggleLike, getLikeStatus } from "../api/likes"
 ```
 
@@ -227,8 +296,15 @@ import { toggleLike, getLikeStatus } from "../api/likes"
 #### 追蹤目前播放的 ref
 
 ```js
-// 切歌、結束、卸載時用來決定要把哪首歌的播放秒數送進 history
-const playbackRef = useRef({ song: null, source: null })
+// 切歌 / 結束 / 卸載時用來決定要把哪筆 history 的 watch_seconds PATCH 上去
+// - historyId: POST 回傳的 id（POST 還沒回來時為 null）
+// - createPromise: 等 POST 拿 id 用
+const playbackRef = useRef({
+  song: null,
+  source: null,
+  historyId: null,
+  createPromise: null,
+})
 ```
 
 #### 啟動時載入歷史紀錄並去重
@@ -258,27 +334,37 @@ getHistory({ limit: 20 })
   .catch(console.error)
 ```
 
-#### 切歌前送出上一首的 watch_seconds
+#### 切歌前用 PATCH 更新上一首的 watch_seconds
 
-從 YouTube player 取 `getCurrentTime()`，少於 1 秒就不送（避免噪音）：
+關鍵點：
+- 一進來就把 ref **snapshot** 取出並清空，避免接著的 `handlePlay` 覆寫造成競態
+- 沒實際播到（< 1 秒）就不 PATCH（保留 POST 時建立的 `watch_seconds=0`）
+- 等 `createPromise` 回來拿 id 再 PATCH
 
 ```js
 const flushCurrentHistory = useCallback(() => {
-  const { song, source } = playbackRef.current
-  if (!song || !source) return
+  const snapshot = playbackRef.current
+  playbackRef.current = { song: null, source: null, historyId: null, createPromise: null }
+
+  if (!snapshot.song || !snapshot.source) return
   let seconds = 0
   try {
     seconds = playerRef.current?.getCurrentTime?.() ?? 0
-  } catch {
-    seconds = 0
-  }
-  if (!seconds || seconds < 1) {
-    playbackRef.current = { song: null, source: null }
-    return
-  }
-  createHistory({ songId: song.id, watchSeconds: seconds, source })
-    .catch((err) => console.error("送出 history 失敗", err))
-  playbackRef.current = { song: null, source: null }
+  } catch { seconds = 0 }
+  if (!seconds || seconds < 1) return
+
+  ;(async () => {
+    let id = snapshot.historyId
+    if (!id && snapshot.createPromise) {
+      try {
+        const resp = await snapshot.createPromise
+        id = resp?.data?.id ?? null
+      } catch { id = null }
+    }
+    if (!id) return
+    try { await updateHistory(id, seconds) }
+    catch (err) { console.error("更新 history 失敗", err) }
+  })()
 }, [])
 ```
 
@@ -287,7 +373,7 @@ const flushCurrentHistory = useCallback(() => {
 2. YouTube `onEnd` 觸發時 → flush 目前這首
 3. 元件卸載時 → flush（清掉指針避免 leak）
 
-#### `handlePlay(song, source)` 加入 source 參數
+#### `handlePlay(song, source)` 加入 source 參數，並在進來時立刻 POST
 
 呼叫者要明確指定點擊來源（給後端的 enum）：
 
@@ -303,11 +389,26 @@ const flushCurrentHistory = useCallback(() => {
 
 ```js
 const handlePlay = async (song, source = HISTORY_SOURCE.RECOMMENDATION) => {
-  flushCurrentHistory()                                      // 先 flush 上一首
+  flushCurrentHistory()                                      // 先 PATCH 上一首
   setCurrentSong(song)
   setIsPlaying(true)
   setLiked(false); setDisliked(false)
-  playbackRef.current = { song, source }                     // 記錄目前正在播
+
+  // 點到歌就立刻 POST 一筆 watch_seconds=0；確保即使馬上 refresh 也不會掉
+  const createPromise = createHistory({ songId: song.id, watchSeconds: 0, source })
+    .then((resp) => {
+      // 如果這時還在播同一首，把後端回傳的 id 寫回 ref，後續 PATCH 用
+      if (
+        playbackRef.current.song?.id === song.id &&
+        playbackRef.current.source === source
+      ) {
+        playbackRef.current.historyId = resp?.data?.id ?? null
+      }
+      return resp
+    })
+    .catch((err) => { console.error("建立 history 失敗", err); return null })
+
+  playbackRef.current = { song, source, historyId: null, createPromise }
 
   // 還原這首歌之前的 like 狀態
   getLikeStatus(song.id)
@@ -349,22 +450,64 @@ const handleToggleLike = async (intentLike) => {
 
 ---
 
-## 四、資料流總覽
+## 四、為什麼「點歌就立刻 POST」（Option B 設計）
+
+### 問題
+
+最初的設計是「切歌時才 POST」，導致一個 bug：
+
+```
+play A → ref={A}                        (還沒送)
+play B → flush(A)送出A、ref={B}          (B 還沒送)
+play C → flush(B)送出C、ref={C}          (C 還沒送)
+play D → flush(C)送出C、ref={D}          (D 還沒送)
+[使用者重新整理]
+        → useEffect cleanup 觸發 flush(D)
+        → 但瀏覽器在 axios POST 完成前已切斷網路 → D 沒進 DB
+```
+
+使用者實際聽 4 首，但 refresh 後歷史紀錄只剩 3 首。
+
+### 解法：先 POST 後 PATCH
+
+| 時機 | 動作 |
+| --- | --- |
+| **點歌時** | 立刻 `POST /api/auth/history`（`watch_seconds=0`），把這首歌**建檔** |
+| **切歌 / 結束 / 卸載** | `PATCH /api/auth/history/<id>` 更新 `watch_seconds` 為實際秒數 |
+
+### 為什麼不會掉資料
+
+- **POST 是快速 fire-and-forget**：使用者點下歌曲就建檔，後端紀錄立刻存在
+- **即使 PATCH 沒送出**：紀錄已存在，只是 `watch_seconds` 維持 0；refresh 後仍會出現在歷史紀錄
+- **避免 race condition**：後端 PATCH 有單調遞增保護，前端 ref 用 snapshot 避免覆寫
+
+### Trade-off
+
+- 短按一下沒聽完整首也會留下紀錄（`watch_seconds=0`）。若推薦系統要把這視為「無效播放」過濾即可。
+
+---
+
+## 五、資料流總覽
 
 ```
 [使用者點某首歌]
         ↓
 HomePage.handlePlay(song, source)
         ↓
-flushCurrentHistory()                        ──→  POST /api/auth/history (上一首)
-playbackRef.current = { song, source }
+flushCurrentHistory()                        ──→  PATCH /api/auth/history/<上一首id>
+                                                  （等上一首 POST 回來拿 id 再 PATCH）
+
+createHistory(song, 0, source)               ──→  POST /api/auth/history
+                                                  resp.data.id 存進 playbackRef.historyId
+
 getLikeStatus(song.id)                       ──→  GET  /api/auth/like
         ↓
 [YouTube 播放，progress timer 跑著]
         ↓
-[使用者切下一首 or 歌結束 or 離開頁面]
+[使用者切下一首 / 歌結束 / 離開頁面]
         ↓
-flushCurrentHistory()                        ──→  POST /api/auth/history (目前這首)
+flushCurrentHistory()                        ──→  PATCH /api/auth/history/<id>
+                                                  （把實際 watch_seconds 補上去）
 
 
 [使用者按愛心 / 拇指向下]
@@ -382,24 +525,26 @@ getHistory({ limit: 20 })                    ──→  GET /api/auth/history
 
 ---
 
-## 五、已知限制 / 後續可優化
+## 六、已知限制 / 後續可優化
 
 1. **`watch_seconds` 不夠精準**：目前是讀 YouTube `getCurrentTime()`，使用者拖動進度條會偏掉。若要嚴格紀錄「實際聽幾秒」，需自己累計播放時間（在 timer 裡每秒 +1）。
-2. **重溫舊愛 / 朋友也在聽 是 mock**：點下去 song_id 是 2001~3008，後端會回 `SONG_NOT_FOUND`。等接上真資料後就會自動恢復正常。
-3. **page unload 時 flush 用的是 `useEffect cleanup`**：使用者直接關瀏覽器分頁的話可能來不及送出（可改用 `navigator.sendBeacon`）。
-4. **`GET /api/auth/history` 每次都重新 query 全部**：總筆數多時可加 `default ordering` 或 cursor pagination；目前 limit 20 / offset 範圍小尚不需要。
-5. **歷史紀錄 UI 去重邏輯在前端**：若希望伺服器端就回「distinct songs」，可在後端加 `?distinct=1` 模式，用 `DISTINCT ON (song_id)` 配合 `played_at desc`。
+2. **重溫舊愛 / 朋友也在聽 是 mock**：點下去 song_id 是 2001~3008，後端 POST 會回 `SONG_NOT_FOUND`，紀錄根本建不起來。等接上真資料後就會自動恢復正常。
+3. **POST 失敗的歌不會再 PATCH**：`createPromise` resolve 為 null 時 flush 會直接 skip，不會反覆嘗試。
+4. **短按沒聽就切歌也會留紀錄**：`watch_seconds=0` 的紀錄推薦系統可視為無效播放過濾。
+5. **`GET /api/auth/history` 沒 cursor pagination**：總筆數多時可改 cursor；目前 limit 20 / offset 範圍小尚不需要。
+6. **歷史紀錄 UI 去重邏輯在前端**：若希望伺服器端就回「distinct songs」，可在後端加 `?distinct=1` 模式，用 `DISTINCT ON (song_id)` 配合 `played_at desc`。
 
 ---
 
-## 六、變更檔案清單
+## 七、變更檔案清單
 
 | 檔案 | 動作 |
 | --- | --- |
-| `backend/users/views.py` | 改 `HistoryView.get()`、新增 `UserSongLikeView.get()` |
-| `frontend/src/api/history.js` | **新增** |
-| `frontend/src/api/likes.js` | **新增** |
-| `frontend/src/pages/HomePage.jsx` | 串接 history / like API、加 source 參數、追蹤播放秒數、還原 like 狀態 |
+| `backend/users/views.py` | 改 `HistoryView.get()` 帶 metadata、新增 `HistoryDetailView.patch()`、新增 `UserSongLikeView.get()` |
+| `backend/users/urls.py` | 新增 `path('history/<int:pk>', HistoryDetailView.as_view(), ...)` |
+| `frontend/src/api/history.js` | **新增**（含 `getHistory` / `createHistory` / `updateHistory` / `HISTORY_SOURCE`） |
+| `frontend/src/api/likes.js` | **新增**（含 `getLikeStatus` / `toggleLike`） |
+| `frontend/src/pages/HomePage.jsx` | 串接 history / like API、點歌立刻 POST、切歌時 PATCH、追蹤 historyId、還原 like 狀態 |
 
 未動 model，**不需要 migration**。
 最後更新日氣：2026-04-26
