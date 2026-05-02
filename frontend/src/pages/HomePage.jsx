@@ -7,7 +7,7 @@ import {
   searchSongs,
 } from "../api/songs"
 import { searchYouTubeVideoId } from "../api/youtube"
-import { getHistory, createHistory, HISTORY_SOURCE } from "../api/history"
+import { getHistory, createHistory, updateHistory, HISTORY_SOURCE } from "../api/history"
 import { toggleLike, getLikeStatus } from "../api/likes"
 
 // ── 推薦歌曲（從 API 取得）
@@ -96,8 +96,15 @@ export default function HomePage() {
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
 
-  // 追蹤「目前正在播放」的歌曲與來源，切歌/結束時用來送 history
-  const playbackRef = useRef({ song: null, source: null })
+  // 追蹤「目前正在播放」的歌曲、來源與其在後端對應的 history id
+  // - historyId: POST /api/auth/history 回傳的 id（POST 還沒回來時為 null）
+  // - createPromise: POST 的 Promise，flush 時用來等到 id
+  const playbackRef = useRef({
+    song: null,
+    source: null,
+    historyId: null,
+    createPromise: null,
+  })
 
   const [youtubeVideoId, setYoutubeVideoId] = useState(null)
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
@@ -300,34 +307,48 @@ export default function HomePage() {
       .catch(console.error)
   }, [])
 
-  // 把目前正在播放的那首歌「實際聽到的秒數」送進後端 history
-  // 在切歌、結束、卸載時呼叫
+  // 把上一首的「實際聽到秒數」PATCH 進已建立的那筆 history
+  // 在切歌、結束、卸載時呼叫；不會 await（fire-and-forget）
   const flushCurrentHistory = useCallback(() => {
-    const { song, source } = playbackRef.current
-    if (!song || !source) return
+    // 先把 ref snapshot 取出並清空，避免後面 handlePlay 覆寫造成競態
+    const snapshot = playbackRef.current
+    playbackRef.current = { song: null, source: null, historyId: null, createPromise: null }
+
+    if (!snapshot.song || !snapshot.source) return
+
     let seconds = 0
     try {
       seconds = playerRef.current?.getCurrentTime?.() ?? 0
     } catch {
       seconds = 0
     }
-    // 沒實際播放就不送，避免污染資料
-    if (!seconds || seconds < 1) {
-      playbackRef.current = { song: null, source: null }
-      return
-    }
-    createHistory({
-      songId: song.id,
-      watchSeconds: seconds,
-      source,
-    }).catch((err) => console.error("送出 history 失敗", err))
-    playbackRef.current = { song: null, source: null }
+    // 真的沒播到就不更新（紀錄保持 watch_seconds=0）
+    if (!seconds || seconds < 1) return
+
+    // 等 POST 回來拿 id，再 PATCH watch_seconds
+    ;(async () => {
+      let id = snapshot.historyId
+      if (!id && snapshot.createPromise) {
+        try {
+          const resp = await snapshot.createPromise
+          id = resp?.data?.id ?? null
+        } catch {
+          id = null
+        }
+      }
+      if (!id) return
+      try {
+        await updateHistory(id, seconds)
+      } catch (err) {
+        console.error("更新 history 失敗", err)
+      }
+    })()
   }, [])
 
   // 播放指定歌曲（切歌時重置 liked/disliked）
   // source: HISTORY_SOURCE.* — 點擊來源，會寫入後端 history
   const handlePlay = async (song, source = HISTORY_SOURCE.RECOMMENDATION) => {
-    // 切歌前先把上一首實際聽到的秒數送出
+    // 切歌前先把上一首聽到的秒數背景 PATCH 出去
     flushCurrentHistory()
 
     setCurrentSong(song)
@@ -335,8 +356,28 @@ export default function HomePage() {
     setLiked(false)
     setDisliked(false)
 
-    // 標記新的目前播放
-    playbackRef.current = { song, source }
+    // 點到歌就立刻 POST 一筆紀錄（watch_seconds=0），確保即使馬上 refresh 也不會掉
+    const createPromise = createHistory({
+      songId: song.id,
+      watchSeconds: 0,
+      source,
+    })
+      .then((resp) => {
+        // 若此時還在播放同一首，就把後端回傳的 id 寫回 ref，後續 PATCH 用
+        if (
+          playbackRef.current.song?.id === song.id &&
+          playbackRef.current.source === source
+        ) {
+          playbackRef.current.historyId = resp?.data?.id ?? null
+        }
+        return resp
+      })
+      .catch((err) => {
+        console.error("建立 history 失敗", err)
+        return null
+      })
+
+    playbackRef.current = { song, source, historyId: null, createPromise }
 
     // 從後端取得這首歌的喜歡 / 不喜歡狀態，還原 UI
     getLikeStatus(song.id)
