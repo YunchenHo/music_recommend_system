@@ -106,6 +106,13 @@ export default function HomePage() {
     createPromise: null,
   })
 
+  // 單曲循環
+  const [isLooping, setIsLooping] = useState(false)
+  const isLoopingRef = useRef(false)
+
+  // 清單循環播放佇列：{ songs: [], index: number } | null
+  const queueRef = useRef(null)
+
   const [youtubeVideoId, setYoutubeVideoId] = useState(null)
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
   const playerRef = useRef(null)
@@ -355,6 +362,8 @@ export default function HomePage() {
     setIsPlaying(true)
     setLiked(false)
     setDisliked(false)
+    setIsLooping(false)
+    isLoopingRef.current = false
 
     // 點到歌就立刻 POST 一筆紀錄（watch_seconds=0），確保即使馬上 refresh 也不會掉
     const createPromise = createHistory({
@@ -435,6 +444,20 @@ export default function HomePage() {
     } catch (err) {
       console.error("toggle like 失敗", err)
     }
+  }
+
+  // 切換單曲循環
+  const toggleLoop = () => {
+    setIsLooping((prev) => {
+      isLoopingRef.current = !prev
+      return !prev
+    })
+  }
+
+  // 從清單播放：設定佇列並播放指定索引的歌
+  const handlePlayFromQueue = (songs, index, source) => {
+    queueRef.current = { songs, index }
+    handlePlay(songs[index], source)
   }
 
   // 切換播放 / 暫停
@@ -632,11 +655,11 @@ export default function HomePage() {
           {/* 展開的歌曲清單 */}
           {isPlaylistOpen && (
             <ul className="playlist">
-              {favorites.map((song) => (
+              {favorites.map((song, idx) => (
                 <li
                   key={song.id}
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
-                  onClick={() => handlePlay(song, HISTORY_SOURCE.PLAYLIST)}
+                  onClick={() => handlePlayFromQueue(favorites, idx, HISTORY_SOURCE.PLAYLIST)}
                 >
                   {song.song_title}
                 </li>
@@ -664,11 +687,11 @@ export default function HomePage() {
 
           {isHistoryOpen && (
             <ul className="playlist">
-              {historySongs.map((song) => (
+              {historySongs.map((song, idx) => (
                 <li
                   key={song.id}
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
-                  onClick={() => handlePlay(song, HISTORY_SOURCE.PLAYLIST)}
+                  onClick={() => handlePlayFromQueue(historySongs, idx, HISTORY_SOURCE.PLAYLIST)}
                 >
                   {song.song_title}
                 </li>
@@ -700,11 +723,11 @@ export default function HomePage() {
                   {playlist.songs === null ? (
                     <li className="playlist-item empty-playlist-item">載入中...</li>
                   ) : playlist.songs.length > 0 ? (
-                    playlist.songs.map((song) => (
+                    playlist.songs.map((song, idx) => (
                       <li
                         key={song.id}
                         className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
-                        onClick={() => handlePlay(song, HISTORY_SOURCE.PLAYLIST)}
+                        onClick={() => handlePlayFromQueue(playlist.songs, idx, HISTORY_SOURCE.PLAYLIST)}
                       >
                         {song.song_title}
                       </li>
@@ -774,7 +797,7 @@ export default function HomePage() {
                   <div
                     key={song.id}
                     className={`song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                    onClick={() => handlePlay(song, HISTORY_SOURCE.RECOMMENDATION)}
+                    onClick={() => { queueRef.current = null; handlePlay(song, HISTORY_SOURCE.RECOMMENDATION) }}
                   >
                     <p className="song-card-title">{song.song_title}</p>
                     <p className="song-card-artist">{song.artist_name}</p>
@@ -796,7 +819,7 @@ export default function HomePage() {
                     <div
                       key={song.id}
                       className={`small-song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                      onClick={() => handlePlay(song, HISTORY_SOURCE.RECOMMENDATION)}
+                      onClick={() => { queueRef.current = null; handlePlay(song, HISTORY_SOURCE.RECOMMENDATION) }}
                     >
                       <p className="small-song-title">{song.song_title}</p>
                       <p className="small-song-artist">{song.artist_name}</p>
@@ -820,6 +843,7 @@ export default function HomePage() {
                       key={item.id}
                       className="friend-card"
                       onClick={() => {
+                        queueRef.current = null
                         handlePlay(
                           {
                             id: item.id,
@@ -882,7 +906,7 @@ export default function HomePage() {
                     <div
                       key={song.id}
                       className={`song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                      onClick={() => handlePlay(song, HISTORY_SOURCE.SEARCH)}
+                      onClick={() => { queueRef.current = null; handlePlay(song, HISTORY_SOURCE.SEARCH) }}
                     >
                       <p className="song-card-title">{song.song_title}</p>
                       <p className="song-card-artist">{song.artist_name}</p>
@@ -947,6 +971,14 @@ export default function HomePage() {
                 disabled={!currentSong}
               >
                 <img src="/add.svg" alt="add" className="add-icon" />
+              </button>
+
+              <button
+                className={`action-btn-new ${isLooping ? "active" : ""}`}
+                title="單曲循環"
+                onClick={toggleLoop}
+              >
+                <img src="/repeat.svg" alt="repeat" className="repeat-icon" />
               </button>
 
             </div>
@@ -1016,6 +1048,18 @@ export default function HomePage() {
                     playerRef.current = e.target
                   }}
                   onEnd={() => {
+                    if (isLoopingRef.current) {
+                      playerRef.current?.seekTo(0)
+                      playerRef.current?.playVideo()
+                      return
+                    }
+                    const q = queueRef.current
+                    if (q && q.songs.length > 1) {
+                      const nextIndex = (q.index + 1) % q.songs.length
+                      queueRef.current = { songs: q.songs, index: nextIndex }
+                      handlePlay(q.songs[nextIndex], HISTORY_SOURCE.PLAYLIST)
+                      return
+                    }
                     flushCurrentHistory()
                     setIsPlaying(false)
                   }}

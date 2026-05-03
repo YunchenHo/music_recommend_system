@@ -22,6 +22,7 @@
    整體 3 欄 Layout
    ══════════════════════════════════════════ */
 * { box-sizing: border-box; margin: 0; padding: 0; }
+button:focus, button:focus-visible { outline: none; box-shadow: none; }
 
 .home-page {
   display: flex;
@@ -619,6 +620,11 @@
   height: 26px;
 }
 
+.repeat-icon {
+  width: 26px;
+  height: 26px;
+}
+
 /* 加入播放清單按鈕 */
 /*
 .add-playlist-btn {
@@ -659,6 +665,7 @@
 
 .action-btn-new {
   border: none;
+  outline: none;
   background: transparent;
   padding: 8px;
   cursor: pointer;
