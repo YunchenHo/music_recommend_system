@@ -4,6 +4,7 @@ import "../styles/HomePage.css"
 import {
   getMe, getFavorites, addFavorite, removeFavorite, getRecommendations,
   getPlaylists, createPlaylist, getPlaylistSongs, addSongToPlaylist,
+  removeSongFromPlaylist, 
   searchSongs,
 } from "../api/songs"
 import { searchYouTubeVideoId } from "../api/youtube"
@@ -561,7 +562,7 @@ export default function HomePage() {
       if (currentSong) {
         await addSongToPlaylist(newPlaylist.id, currentSong.id)
         setCustomPlaylists((prev) => [...prev, {
-          ...newPlaylist, icon: selectedPlaylistIcon,
+          ...newPlaylist, playlist_icon: selectedPlaylistIcon,
           song_count: 1, songs: [currentSong],
         }])
       } else {
@@ -609,16 +610,25 @@ export default function HomePage() {
   }
 
   // ⭐ 刪除自訂 playlist
-  const handleDeleteFromCustomPlaylist = () => {
-    setCustomPlaylists(prev =>
-      prev.map(p => {
-        if (p.id !== selectedPlaylistId) return p
-        return {
-          ...p,
-          songs: p.songs.filter(s => s.id !== selectedSong.id)
-        }
-      })
-    )
+  const handleDeleteFromCustomPlaylist = async () => {
+    try {
+      // ⭐ 1. 打 API
+      await removeSongFromPlaylist(selectedPlaylistId, selectedSong.id)
+
+      // ⭐ 2. 更新前端
+      setCustomPlaylists(prev =>
+        prev.map(p => {
+          if (p.id !== selectedPlaylistId) return p
+          return {
+            ...p,
+            songs: p.songs.filter(s => s.id !== selectedSong.id),
+            song_count: p.song_count - 1   // ⭐別忘這個
+          }
+        })
+      )
+    } catch (err) {
+      console.error("刪除 playlist 歌曲失敗", err)
+    }
   }
 
   // 搜尋（debounce 300ms）
@@ -744,7 +754,7 @@ export default function HomePage() {
                 onClick={() => handleToggleCustomPlaylist(playlist.id)}
               >
                 <div className="playlist-card-thumb">
-                  <img src={`/album_icon/${playlist.icon || PLAYLIST_ICONS[0]}`} alt={playlist.name} />
+                  <img src={`/album_icon/${playlist.playlist_icon || PLAYLIST_ICONS[0]}`} alt={playlist.playlist_name} />
                 </div>
                 <div className="playlist-card-info">
                   <span className="playlist-card-name">{playlist.playlist_name}</span>
@@ -1233,7 +1243,7 @@ export default function HomePage() {
                       onClick={() => handleAddSongToPlaylist(playlist.id)}
                     >
                       <div className="playlist-modal-item-icon">
-                        <img src={`/album_icon/${playlist.icon || PLAYLIST_ICONS[0]}`} alt={playlist.name} />
+                        <img src={`/album_icon/${playlist.playlist_icon || PLAYLIST_ICONS[0]}`} alt={playlist.playlist_name} />
                       </div>
 
                       <div className="playlist-modal-item-info">
