@@ -71,6 +71,10 @@ const PLAYLIST_ICONS = [
 
 // ─────────────────────────────────────────────────────
 export default function HomePage() {
+
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [selectedSong, setSelectedSong] = useState(null)
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState(null)
   // 目前顯示的頁面：'home' | 'search'
   const [view, setView] = useState("home")
 
@@ -392,6 +396,28 @@ export default function HomePage() {
     setCustomPlaylists((prev) => [...prev, newPlaylist])
     closePlaylistModal()
   }
+    // ⭐ 刪除收藏
+  const handleDeleteFromFavorites = async () => {
+    try {
+      await removeFavorite(selectedSong.id)
+      setFavorites(prev => prev.filter(s => s.id !== selectedSong.id))
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  // ⭐ 刪除自訂 playlist
+  const handleDeleteFromCustomPlaylist = () => {
+    setCustomPlaylists(prev =>
+      prev.map(p => {
+        if (p.id !== selectedPlaylistId) return p
+        return {
+          ...p,
+          songs: p.songs.filter(s => s.id !== selectedSong.id)
+        }
+      })
+    )
+  }
 
   return (
     <div className="home-page">
@@ -429,9 +455,22 @@ export default function HomePage() {
                 <li
                   key={song.id}
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
-                  onClick={() => handlePlay(song)}
                 >
-                  {song.song_title}
+                  <span onClick={() => handlePlay(song)}>
+                    {song.song_title}
+                  </span>
+
+                  <span
+                    className="playlist-more"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedSong(song)
+                      setSelectedPlaylistId(null) // ⭐重要（custom playlist用）
+                      setIsDeleteModalOpen(true)
+                    }}
+                  >
+                    ⋯
+                  </span>
                 </li>
               ))}
             </ul>
@@ -499,9 +538,22 @@ export default function HomePage() {
                       <li
                         key={song.id}
                         className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
-                        onClick={() => handlePlay(song)}
                       >
-                        {song.song_title}
+                        <span onClick={() => handlePlay(song)}>
+                          {song.song_title}
+                        </span>
+
+                        <span
+                          className="playlist-more"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedSong(song)
+                            setSelectedPlaylistId(playlist.id)
+                            setIsDeleteModalOpen(true)
+                          }}
+                        >
+                          ⋯
+                        </span>
                       </li>
                     ))
                   ) : (
@@ -1003,6 +1055,33 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      {isDeleteModalOpen && (
+        <div className="delete-modal-overlay">
+          <div className="delete-modal">
+
+            <div className="delete-modal-header">
+              <h2>{selectedSong?.song_title}</h2>
+              <button onClick={() => setIsDeleteModalOpen(false)}>×</button>
+            </div>
+
+            <button
+              className="delete-btn"
+              onClick={() => {
+                if (selectedPlaylistId) {
+                  handleDeleteFromCustomPlaylist()
+                } else {
+                  handleDeleteFromFavorites()
+                }
+                setIsDeleteModalOpen(false)
+              }}
+            >
+              Delete From Playlist
+            </button>
+
+          </div>
+        </div>
+      )}      
     </div>
   )
 }

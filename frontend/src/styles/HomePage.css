@@ -1318,3 +1318,63 @@
   color: #e75480;
   font-weight: 600;
 }
+
+.playlist-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.playlist-more {
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px 8px;
+}
+
+.delete-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.delete-modal {
+  width: 400px;
+  background: #a9d6f5;
+  border-radius: 20px;
+  padding: 20px;
+}
+
+.delete-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.delete-btn {
+  margin-top: 30px;
+  width: 100%;
+  padding: 12px;
+  background: #6e6fe0;
+  color: #a9d6f5;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.delete-modal-header button {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.delete-modal-header button:hover {
+  background: rgba(255,255,255,0.3);
+}
