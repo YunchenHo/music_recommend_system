@@ -8,10 +8,13 @@ from rest_framework.permissions import IsAuthenticated
 
 from django.conf import settings
 from django.contrib.auth import login
+from django.db import connection
+from django.db.models import Count
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.utils.decorators import method_decorator
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.db import transaction
 
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -27,6 +30,8 @@ from .models import (
     PlaylistSong,
     RecommendationBatch,
     RecommendationItem,
+    History,
+    UserSongLike,
 )
 
 logger = logging.getLogger(__name__)
@@ -557,3 +562,654 @@ class DevLoginView(APIView):
                 "sessionid": request.session.session_key,
             }
         }, status=status.HTTP_200_OK)
+
+
+# ---------------------------------------------------------------------------
+# Playlists API: CRUD for playlists and playlist songs
+# ---------------------------------------------------------------------------
+
+
+class PlaylistListCreateView(APIView):
+    """
+    GET  /api/playlists/      — 列出使用者自訂清單（排除 archive）+ 歌曲數量
+    POST /api/playlists/      — 建立新清單 { "playlist_name": "..." }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        playlists = (
+            Playlist.objects
+            .filter(user=request.user)
+            .exclude(playlist_name=ARCHIVE_PLAYLIST_NAME)
+            .annotate(song_count=Count('songs'))
+            .order_by('created_at')
+        )
+
+        data = [
+            {
+                "id": p.id,
+                "playlist_name": p.playlist_name,
+                "song_count": p.song_count,
+                "created_at": p.created_at.isoformat(),
+                "updated_at": p.updated_at.isoformat(),
+            }
+            for p in playlists
+        ]
+
+        return Response({
+            "status": "success",
+            "data": data,
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        playlist_name = request.data.get('playlist_name', '').strip()
+
+        if not playlist_name:
+            return Response({
+                "status": "error",
+                "message": "Playlist name is required.",
+                "code": "MISSING_PLAYLIST_NAME",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if playlist_name.lower() == ARCHIVE_PLAYLIST_NAME:
+            return Response({
+                "status": "error",
+                "message": "Cannot use reserved playlist name.",
+                "code": "RESERVED_NAME",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(playlist_name) > 255:
+            return Response({
+                "status": "error",
+                "message": "Playlist name is too long (max 255 characters).",
+                "code": "NAME_TOO_LONG",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        playlist = Playlist.objects.create(
+            user=request.user,
+            playlist_name=playlist_name,
+        )
+
+        return Response({
+            "status": "success",
+            "message": "Playlist created.",
+            "data": {
+                "id": playlist.id,
+                "playlist_name": playlist.playlist_name,
+                "song_count": 0,
+                "created_at": playlist.created_at.isoformat(),
+                "updated_at": playlist.updated_at.isoformat(),
+            },
+        }, status=status.HTTP_201_CREATED)
+
+
+class PlaylistDetailView(APIView):
+    """
+    PATCH  /api/playlists/<id>/  — 修改清單名稱
+    DELETE /api/playlists/<id>/  — 刪除清單
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_playlist(self, request, playlist_id):
+        """取得清單，確認屬於當前使用者。回傳 (playlist, error_response)。"""
+        try:
+            playlist = Playlist.objects.get(id=playlist_id, user=request.user)
+        except Playlist.DoesNotExist:
+            return None, Response({
+                "status": "error",
+                "message": "Playlist not found.",
+                "code": "PLAYLIST_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+        return playlist, None
+
+    def patch(self, request, playlist_id):
+        playlist, err = self._get_playlist(request, playlist_id)
+        if err:
+            return err
+
+        if playlist.playlist_name == ARCHIVE_PLAYLIST_NAME:
+            return Response({
+                "status": "error",
+                "message": "Cannot rename the archive playlist.",
+                "code": "CANNOT_MODIFY_ARCHIVE",
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        new_name = request.data.get('playlist_name', '').strip()
+        if not new_name:
+            return Response({
+                "status": "error",
+                "message": "Playlist name is required.",
+                "code": "MISSING_PLAYLIST_NAME",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if new_name.lower() == ARCHIVE_PLAYLIST_NAME:
+            return Response({
+                "status": "error",
+                "message": "Cannot use reserved playlist name.",
+                "code": "RESERVED_NAME",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(new_name) > 255:
+            return Response({
+                "status": "error",
+                "message": "Playlist name is too long (max 255 characters).",
+                "code": "NAME_TOO_LONG",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        playlist.playlist_name = new_name
+        playlist.save()
+
+        return Response({
+            "status": "success",
+            "message": "Playlist renamed.",
+            "data": {
+                "id": playlist.id,
+                "playlist_name": playlist.playlist_name,
+            },
+        }, status=status.HTTP_200_OK)
+
+    def delete(self, request, playlist_id):
+        playlist, err = self._get_playlist(request, playlist_id)
+        if err:
+            return err
+
+        if playlist.playlist_name == ARCHIVE_PLAYLIST_NAME:
+            return Response({
+                "status": "error",
+                "message": "Cannot delete the archive playlist.",
+                "code": "CANNOT_DELETE_ARCHIVE",
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        playlist.delete()
+
+        return Response({
+            "status": "success",
+            "message": "Playlist deleted.",
+        }, status=status.HTTP_200_OK)
+
+
+class PlaylistSongListCreateView(APIView):
+    """
+    GET  /api/playlists/<id>/songs/  — 取得清單內歌曲
+    POST /api/playlists/<id>/songs/  — 加歌到清單 { "song_id": 123 }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_playlist(self, request, playlist_id):
+        try:
+            playlist = Playlist.objects.get(id=playlist_id, user=request.user)
+        except Playlist.DoesNotExist:
+            return None, Response({
+                "status": "error",
+                "message": "Playlist not found.",
+                "code": "PLAYLIST_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+        return playlist, None
+
+    def get(self, request, playlist_id):
+        playlist, err = self._get_playlist(request, playlist_id)
+        if err:
+            return err
+
+        playlist_songs = (
+            PlaylistSong.objects
+            .filter(playlist=playlist)
+            .select_related('song')
+            .order_by('-added_at')
+        )
+
+        data = [
+            {
+                "id": ps.song.id,
+                "song_title": ps.song.song_title,
+                "artist_name": ps.song.artist_name,
+                "song_image": ps.song.song_image,
+                "album_name": ps.song.album_name,
+                "added_at": ps.added_at.isoformat(),
+            }
+            for ps in playlist_songs
+        ]
+
+        return Response({
+            "status": "success",
+            "data": data,
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request, playlist_id):
+        playlist, err = self._get_playlist(request, playlist_id)
+        if err:
+            return err
+
+        song_id = request.data.get('song_id')
+        if song_id is None:
+            return Response({
+                "status": "error",
+                "message": "song_id is required.",
+                "code": "MISSING_SONG_ID",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            song = Song.objects.get(id=song_id)
+        except Song.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Song not found.",
+                "code": "SONG_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        _, created = PlaylistSong.objects.get_or_create(
+            playlist=playlist,
+            song=song,
+        )
+
+        if not created:
+            return Response({
+                "status": "error",
+                "message": "Song already in this playlist.",
+                "code": "ALREADY_IN_PLAYLIST",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            "status": "success",
+            "message": "Song added to playlist.",
+        }, status=status.HTTP_201_CREATED)
+
+
+class PlaylistSongDetailView(APIView):
+    """DELETE /api/playlists/<id>/songs/<song_id>/ — 從清單移除歌曲"""
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, playlist_id, song_id):
+        try:
+            playlist = Playlist.objects.get(id=playlist_id, user=request.user)
+        except Playlist.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Playlist not found.",
+                "code": "PLAYLIST_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        deleted, _ = PlaylistSong.objects.filter(
+            playlist=playlist,
+            song_id=song_id,
+        ).delete()
+
+        if deleted == 0:
+            return Response({
+                "status": "error",
+                "message": "Song not in this playlist.",
+                "code": "NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({
+            "status": "success",
+            "message": "Song removed from playlist.",
+        }, status=status.HTTP_200_OK)
+
+
+# ---------------------------------------------------------------------------
+# Search API: FULLTEXT search on song_title + artist_name
+# ---------------------------------------------------------------------------
+
+class SearchSongsView(APIView):
+    """
+    GET /api/songs/search?q=keyword — 搜尋歌曲
+    使用 MySQL FULLTEXT INDEX (ngram parser) 做全文搜尋，
+    以相關性分數排序，回傳前 20 筆結果。
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        query = request.query_params.get('q', '').strip()
+
+        if not query:
+            return Response({
+                "status": "error",
+                "message": "Search query is required.",
+                "code": "MISSING_QUERY",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(query) > 100:
+            return Response({
+                "status": "error",
+                "message": "Search query is too long (max 100 characters).",
+                "code": "QUERY_TOO_LONG",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 使用 MySQL FULLTEXT MATCH ... AGAINST 搜尋
+        # IN BOOLEAN MODE 支援部分匹配；用 + 和 * 強化匹配效果
+        # 若 FULLTEXT INDEX 尚未建立，會 fallback 到 icontains
+        try:
+            sql = """
+                SELECT id, song_title, artist_name, album_name, song_image, language,
+                       MATCH(song_title, artist_name) AGAINST(%s IN BOOLEAN MODE) AS relevance
+                FROM users_song
+                WHERE MATCH(song_title, artist_name) AGAINST(%s IN BOOLEAN MODE)
+                ORDER BY relevance DESC
+                LIMIT 20
+            """
+            # 在 BOOLEAN MODE 下，加上 * 做前綴匹配
+            search_term = f'*{query}*'
+
+            with connection.cursor() as cursor:
+                cursor.execute(sql, [search_term, search_term])
+                columns = [col[0] for col in cursor.description]
+                rows = cursor.fetchall()
+
+            data = [
+                {
+                    "id": row[0],
+                    "song_title": row[1],
+                    "artist_name": row[2],
+                    "album_name": row[3],
+                    "song_image": row[4],
+                    "language": row[5],
+                }
+                for row in rows
+            ]
+        except Exception:
+            # Fallback: 若 FULLTEXT INDEX 不存在，用 icontains
+            logger.warning("FULLTEXT search failed, falling back to icontains")
+            songs = Song.objects.filter(
+                song_title__icontains=query
+            ).union(
+                Song.objects.filter(artist_name__icontains=query)
+            )[:20]
+
+            data = [
+                {
+                    "id": s.id,
+                    "song_title": s.song_title,
+                    "artist_name": s.artist_name,
+                    "album_name": s.album_name,
+                    "song_image": s.song_image,
+                    "language": s.language,
+                }
+                for s in songs
+            ]
+
+        return Response({
+            "status": "success",
+            "data": data,
+        }, status=status.HTTP_200_OK)
+class HistoryView(APIView):
+    """
+    GET /api/history — 取得播放紀錄列表
+    POST /api/history — 新增播放紀錄
+    """
+    permission_classes = [IsAuthenticated]
+    DEFAULT_LIMIT = 20
+    MAX_LIMIT = 50
+
+    def post(self, request):
+        user = request.user
+
+        song_id = request.data.get('song_id')
+        watch_seconds = request.data.get('watch_seconds')
+        source = request.data.get('source')
+
+        if song_id is None:
+            return Response({
+                "status": "error",
+                "message": "song_id is required.",
+                "code": "MISSING_SONG_ID",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if watch_seconds is None:
+            return Response({
+                "status": "error",
+                "message": "watch_seconds is required.",
+                "code": "MISSING_WATCH_SECONDS",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if source is None or source == '': # source is not None and not empty
+            return Response({
+                "status": "error",
+                "message": "source is required.",
+                "code": "MISSING_SOURCE",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if source not in History.SourceChoices.values:
+            return Response({
+                "status": "error",
+                "message": "Invalid source.",
+                "code": "INVALID_SOURCE",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Song exists check
+        try:
+            song = Song.objects.get(id=song_id)
+        except Song.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Song not found.",
+                "code": "SONG_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            watch_seconds = int(watch_seconds)
+            if watch_seconds < 0:
+                raise ValueError
+        except ValueError:
+            return Response(
+                {
+                    "status": "error",
+                    "message": "watch_seconds must be an integer >= 0",
+                    "code": "INVALID_WATCH_SECONDS",
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        history = History.objects.create(user=user, song=song, watch_seconds=watch_seconds, source=source)
+
+        return Response({
+            "status": "success",
+            "message": "History created.",
+            "data": {
+                "id": history.id,
+                "song_id": history.song_id,
+                "watch_seconds": history.watch_seconds,
+                "source": history.source,
+            },
+        }, status=status.HTTP_201_CREATED)
+
+    def get(self, request):
+        user = request.user
+
+        limit = request.query_params.get('limit', self.DEFAULT_LIMIT)
+        offset = request.query_params.get('offset', 0)
+        song_id = request.query_params.get('song_id')
+        source = request.query_params.get('source')
+
+        try:
+            limit = int(limit)
+            offset = int(offset)
+            if limit <= 0 or offset < 0:
+                raise ValueError
+            limit = min(limit, self.MAX_LIMIT) # 上限保護
+        except ValueError:
+            return Response({
+                "status": "error",
+                "message": "Invalid limit or offset.",
+                "code": "INVALID_LIMIT_OR_OFFSET",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = History.objects.filter(user=user).select_related('song')
+
+        if song_id is not None:
+            queryset = queryset.filter(song_id=song_id)
+
+        if source is not None:
+            if source not in History.SourceChoices.values:
+                return Response({
+                    "status": "error",
+                    "message": "Invalid source.",
+                    "code": "INVALID_SOURCE",
+                }, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(source=source)
+
+        queryset = queryset.order_by('-played_at') # 按 played_at 排序，最新在前
+
+        # 取得總筆數
+        total = queryset.count()
+        queryset = queryset[offset:offset+limit]
+
+        results = [ ]
+        for history in queryset:
+            song = history.song
+            results.append({
+                "id": history.id,
+                "song_id": history.song_id,
+                "song_title": song.song_title,
+                "artist_name": song.artist_name,
+                "album_name": song.album_name,
+                "song_image": song.song_image,
+                "language": song.language,
+                "watch_seconds": history.watch_seconds,
+                "source": history.source,
+                "played_at": history.played_at,
+                "created_at": history.created_at,
+            })
+
+        return Response({
+            "status": "success",
+            "data": results,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }, status=status.HTTP_200_OK)
+
+class HistoryDetailView(APIView):
+    """
+    PATCH /api/auth/history/<pk> — 更新某筆歷史紀錄的 watch_seconds
+    僅允許更新「本人建立」的紀錄。
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        try:
+            history = History.objects.get(pk=pk)
+        except History.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "History not found.",
+                "code": "HISTORY_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        if history.user_id != request.user.id:
+            # 不是本人的紀錄一律 404，避免洩漏 id 是否存在
+            return Response({
+                "status": "error",
+                "message": "History not found.",
+                "code": "HISTORY_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        watch_seconds = request.data.get('watch_seconds')
+        if watch_seconds is None:
+            return Response({
+                "status": "error",
+                "message": "watch_seconds is required.",
+                "code": "MISSING_WATCH_SECONDS",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            watch_seconds = int(watch_seconds)
+            if watch_seconds < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return Response({
+                "status": "error",
+                "message": "watch_seconds must be an integer >= 0",
+                "code": "INVALID_WATCH_SECONDS",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 單調遞增保護：避免 race condition 導致較新的小值蓋掉較大的值
+        # （例如重新整理時末段 PATCH 比中段 PATCH 晚抵達）
+        if watch_seconds > history.watch_seconds:
+            history.watch_seconds = watch_seconds
+            history.save(update_fields=['watch_seconds'])
+
+        return Response({
+            "status": "success",
+            "message": "History updated.",
+            "data": {
+                "id": history.id,
+                "song_id": history.song_id,
+                "watch_seconds": history.watch_seconds,
+                "source": history.source,
+            },
+        }, status=status.HTTP_200_OK)
+
+
+class UserSongLikeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """
+        GET /api/auth/like?song_id=<id> — 取得目前使用者對某首歌的喜歡狀態
+        回傳 is_liked: true / false / null（null 表示尚未設定）
+        """
+        song_id = request.query_params.get('song_id')
+        if song_id is None:
+            return Response({
+                "status": "error",
+                "message": "song_id is required.",
+                "code": "MISSING_SONG_ID",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            song_id_int = int(song_id)
+        except (TypeError, ValueError):
+            return Response({
+                "status": "error",
+                "message": "song_id must be an integer.",
+                "code": "INVALID_SONG_ID",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if not Song.objects.filter(id=song_id_int).exists():
+            return Response({
+                "status": "error",
+                "message": "Song not found.",
+                "code": "SONG_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        like = UserSongLike.objects.filter(user=request.user, song_id=song_id_int).first()
+        is_liked = like.is_liked if like is not None else None
+
+        return Response({
+            "status": "success",
+            "data": {
+                "song_id": song_id_int,
+                "is_liked": is_liked,
+            },
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        song_id = request.data.get('song_id')
+        intent_like = request.data.get('is_like') # 前端傳回來的意圖
+
+        if not isinstance(intent_like, bool):
+            return Response({"status": "error",
+                "message": "is_like must be a boolean.",
+                "code": "INVALID_IS_LIKE",
+            }, status=status.HTTP_400_BAD_REQUEST)
+        if not Song.objects.filter(id=song_id).exists():
+            return Response({"status": "error",
+                "message": "Song not found.",
+                "code": "SONG_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # 使用 transaction.atomic() 來確保操作的原子性
+        with transaction.atomic():
+            existing = UserSongLike.objects.select_for_update().filter(
+                user=request.user,
+                song_id=song_id,
+            ).first()
+            if existing and existing.is_liked == intent_like:
+                existing.delete()
+                return Response({"status": "success", "data": {"is_liked": None}})
+            UserSongLike.objects.update_or_create(
+                user=request.user, song_id=song_id,
+                defaults={'is_liked': intent_like},
+            )
+        return Response({"status": "success", "data": {"is_liked": intent_like}})

@@ -163,3 +163,52 @@ class RecommendationItem(models.Model):
 
     def __str__(self):
         return f"Batch {self.batch_id} #{self.rank} → {self.song_id}"
+
+class History(models.Model):
+    # 定義 ENUM 選項，左邊是存進資料庫的值，右邊是給人看的標籤
+    class SourceChoices(models.TextChoices):
+        RECOMMENDATION = 'RECOMMENDATION', '推薦系統'
+        SEARCH = 'SEARCH', '主動搜尋'
+        PLAYLIST = 'PLAYLIST', '播放清單'
+        ONBOARDING = 'ONBOARDING', '冷啟動預選'
+        FRIEND = 'FRIEND', '好友也在聽'
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='histories')
+    song = models.ForeignKey(Song, on_delete=models.CASCADE, related_name='histories')
+    played_at = models.DateTimeField(auto_now_add=True)
+    watch_seconds = models.IntegerField()
+    # 使用 choices 來嚴格限制傳入的值
+    source = models.CharField(max_length=20, choices=SourceChoices.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # 效能加速器：針對「尋找特定用戶的紀錄並依時間排序」進行優化
+        indexes = [
+            models.Index(fields=['user', '-played_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} 聽了 {self.song.song_title} ({self.watch_seconds}秒)"
+
+class UserSongLike(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='song_likes')
+    song = models.ForeignKey(Song, on_delete=models.CASCADE, related_name='liked_by_users')
+
+    is_liked = models.BooleanField(help_text='True: 喜歡，False: 不喜歡')
+    created_at = models.DateTimeField(auto_now_add=True) # 建立時間
+    updated_at = models.DateTimeField(auto_now=True) # 更新時間
+
+    # Django 預設的 unique constraint
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'song'], name='unique_user_song_like')
+        ]
+    
+        # 效能加速器：針對「尋找特定用戶的喜歡歌曲」進行優化
+        indexes = [
+            models.Index(fields=['user', 'song', 'is_liked']),
+        ]
+    
+    def __str__(self):
+        status = "likes" if self.is_liked else "dislikes"
+        return f"{self.user.username} {status} {self.song.song_title}"

@@ -1,8 +1,14 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import YouTube from "react-youtube"
 import "../styles/HomePage.css"
-import { getMe, getFavorites, addFavorite, removeFavorite, getRecommendations } from "../api/songs"
+import {
+  getMe, getFavorites, addFavorite, removeFavorite, getRecommendations,
+  getPlaylists, createPlaylist, getPlaylistSongs, addSongToPlaylist,
+  searchSongs,
+} from "../api/songs"
 import { searchYouTubeVideoId } from "../api/youtube"
+import { getHistory, createHistory, updateHistory, HISTORY_SOURCE } from "../api/history"
+import { toggleLike, getLikeStatus } from "../api/likes"
 
 // ── 推薦歌曲（從 API 取得）
 
@@ -88,14 +94,28 @@ export default function HomePage() {
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false)
 
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
-  const [historySongs, setHistorySongs] = useState([
-    { id: 9001, song_title: "Let It Go", artist_name: "Elsa" },
-    { id: 9002, song_title: "Sorry", artist_name: "Justin Bieber" },
-    { id: 9003, song_title: "Flowers", artist_name: "Miley Cyrus" },
-  ])
+  // historySongs: [{ id, song_title, artist_name }]，由後端 history API 載入
+  const [historySongs, setHistorySongs] = useState([])
 
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
+
+  // 追蹤「目前正在播放」的歌曲、來源與其在後端對應的 history id
+  // - historyId: POST /api/auth/history 回傳的 id（POST 還沒回來時為 null）
+  // - createPromise: POST 的 Promise，flush 時用來等到 id
+  const playbackRef = useRef({
+    song: null,
+    source: null,
+    historyId: null,
+    createPromise: null,
+  })
+
+  // 單曲循環
+  const [isLooping, setIsLooping] = useState(false)
+  const isLoopingRef = useRef(false)
+
+  // 清單循環播放佇列：{ songs: [], index: number } | null
+  const queueRef = useRef(null)
 
   const [youtubeVideoId, setYoutubeVideoId] = useState(null)
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
@@ -151,10 +171,9 @@ export default function HomePage() {
     { id: 103, username: "雅婷", profile_picture: null },
   ])
 
-  const [customPlaylists, setCustomPlaylists] = useState([
-    { id: 1, name: "Sad Songs", songs: [] },
-    { id: 2, name: "Party Songs", songs: [] },
-  ])
+  const [customPlaylists, setCustomPlaylists] = useState([])
+  // Each playlist: { id, playlist_name, song_count, songs: [...] | null }
+  // songs 為 null 表示尚未載入（lazy load）
 
   const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false)
   const [playlistModalView, setPlaylistModalView] = useState("list")
@@ -170,6 +189,12 @@ export default function HomePage() {
   const [user, setUser] = useState({ nickname: "", profilePicture: null })
   const [favorites, setFavorites] = useState([])   // [{ id, song_title, artist_name }]
   const [recommendations, setRecommendations] = useState([])  // [{ rank, id, song_title, artist_name, ... }]
+
+  // ── 搜尋 ──
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchResults, setSearchResults] = useState([])
+  const [isSearching, setIsSearching] = useState(false)
+  const searchTimerRef = useRef(null)
 
   // 收藏狀態由 favorites 清單推導（不需要額外 state）
   const isSaved = currentSong ? favorites.some((f) => f.id === currentSong.id) : false
@@ -247,7 +272,7 @@ export default function HomePage() {
     closeFriendsModal()
   }
 
-  // 頁面載入時取得用戶資訊與收藏清單
+  // 頁面載入時取得用戶資訊、收藏清單、推薦歌曲、自訂清單、歷史紀錄
   useEffect(() => {
     getMe()
       .then((data) => setUser({ nickname: data.username, profilePicture: data.profile_picture || null }))
@@ -260,14 +285,121 @@ export default function HomePage() {
     getRecommendations()
       .then((data) => setRecommendations(data))
       .catch(console.error)
+
+    getPlaylists()
+      .then((data) =>
+        setCustomPlaylists(
+          data.map((p) => ({ ...p, songs: null }))
+        )
+      )
+      .catch(console.error)
+
+    // 載入歷史紀錄（僅取最近 20 筆）；後端已直接回傳 song_title/artist_name 等
+    getHistory({ limit: 20 })
+      .then((resp) => {
+        const items = resp?.data ?? []
+        // 後端已依 played_at desc 排序，但同首歌可能多筆 → 在前端去重保留最新
+        const seen = new Set()
+        const deduped = []
+        for (const it of items) {
+          if (seen.has(it.song_id)) continue
+          seen.add(it.song_id)
+          deduped.push({
+            id: it.song_id,
+            song_title: it.song_title,
+            artist_name: it.artist_name,
+            song_image: it.song_image,
+            album_name: it.album_name,
+            language: it.language,
+          })
+        }
+        setHistorySongs(deduped)
+      })
+      .catch(console.error)
+  }, [])
+
+  // 把上一首的「實際聽到秒數」PATCH 進已建立的那筆 history
+  // 在切歌、結束、卸載時呼叫；不會 await（fire-and-forget）
+  const flushCurrentHistory = useCallback(() => {
+    // 先把 ref snapshot 取出並清空，避免後面 handlePlay 覆寫造成競態
+    const snapshot = playbackRef.current
+    playbackRef.current = { song: null, source: null, historyId: null, createPromise: null }
+
+    if (!snapshot.song || !snapshot.source) return
+
+    let seconds = 0
+    try {
+      seconds = playerRef.current?.getCurrentTime?.() ?? 0
+    } catch {
+      seconds = 0
+    }
+    // 真的沒播到就不更新（紀錄保持 watch_seconds=0）
+    if (!seconds || seconds < 1) return
+
+    // 等 POST 回來拿 id，再 PATCH watch_seconds
+    ;(async () => {
+      let id = snapshot.historyId
+      if (!id && snapshot.createPromise) {
+        try {
+          const resp = await snapshot.createPromise
+          id = resp?.data?.id ?? null
+        } catch {
+          id = null
+        }
+      }
+      if (!id) return
+      try {
+        await updateHistory(id, seconds)
+      } catch (err) {
+        console.error("更新 history 失敗", err)
+      }
+    })()
   }, [])
 
   // 播放指定歌曲（切歌時重置 liked/disliked）
-  const handlePlay = async (song) => {
+  // source: HISTORY_SOURCE.* — 點擊來源，會寫入後端 history
+  const handlePlay = async (song, source = HISTORY_SOURCE.RECOMMENDATION) => {
+    // 切歌前先把上一首聽到的秒數背景 PATCH 出去
+    flushCurrentHistory()
+
     setCurrentSong(song)
     setIsPlaying(true)
     setLiked(false)
     setDisliked(false)
+    setIsLooping(false)
+    isLoopingRef.current = false
+
+    // 點到歌就立刻 POST 一筆紀錄（watch_seconds=0），確保即使馬上 refresh 也不會掉
+    const createPromise = createHistory({
+      songId: song.id,
+      watchSeconds: 0,
+      source,
+    })
+      .then((resp) => {
+        // 若此時還在播放同一首，就把後端回傳的 id 寫回 ref，後續 PATCH 用
+        if (
+          playbackRef.current.song?.id === song.id &&
+          playbackRef.current.source === source
+        ) {
+          playbackRef.current.historyId = resp?.data?.id ?? null
+        }
+        return resp
+      })
+      .catch((err) => {
+        console.error("建立 history 失敗", err)
+        return null
+      })
+
+    playbackRef.current = { song, source, historyId: null, createPromise }
+
+    // 從後端取得這首歌的喜歡 / 不喜歡狀態，還原 UI
+    getLikeStatus(song.id)
+      .then((resp) => {
+        const isLiked = resp?.data?.is_liked
+        setLiked(isLiked === true)
+        setDisliked(isLiked === false)
+      })
+      .catch((err) => console.error("取得 like 狀態失敗", err))
 
     setHistorySongs((prev) => {
       const filtered = prev.filter((item) => item.id !== song.id)
@@ -295,6 +427,41 @@ export default function HomePage() {
     } finally {
       setIsLoadingVideo(false)
     }
+  }
+
+  // 卸載時送出最後一首的 history
+  useEffect(() => {
+    return () => {
+      flushCurrentHistory()
+    }
+  }, [flushCurrentHistory])
+
+  // 喜歡 / 不喜歡：呼叫後端 toggleLike，根據回傳更新 UI
+  const handleToggleLike = async (intentLike) => {
+    if (!currentSong) return
+    try {
+      const resp = await toggleLike(currentSong.id, intentLike)
+      const isLiked = resp?.data?.is_liked
+      // is_liked: true / false / null（取消）
+      setLiked(isLiked === true)
+      setDisliked(isLiked === false)
+    } catch (err) {
+      console.error("toggle like 失敗", err)
+    }
+  }
+
+  // 切換單曲循環
+  const toggleLoop = () => {
+    setIsLooping((prev) => {
+      isLoopingRef.current = !prev
+      return !prev
+    })
+  }
+
+  // 從清單播放：設定佇列並播放指定索引的歌
+  const handlePlayFromQueue = (songs, index, source) => {
+    queueRef.current = { songs, index }
+    handlePlay(songs[index], source)
   }
 
   // 切換播放 / 暫停
@@ -349,27 +516,30 @@ export default function HomePage() {
     setPlaylistNameError("")
   }
 
-  const handleAddSongToPlaylist = (playlistId) => {
+  const handleAddSongToPlaylist = async (playlistId) => {
     if (!currentSong) return
 
-    setCustomPlaylists((prev) =>
-      prev.map((playlist) => {
-        if (playlist.id !== playlistId) return playlist
-
-        const alreadyExists = playlist.songs.some((song) => song.id === currentSong.id)
-        if (alreadyExists) return playlist
-
-        return {
-          ...playlist,
-          songs: [...playlist.songs, currentSong],
-        }
-      })
-    )
-
-    closePlaylistModal()
+    try {
+      await addSongToPlaylist(playlistId, currentSong.id)
+      // 更新 local state 的 song_count
+      setCustomPlaylists((prev) =>
+        prev.map((p) => {
+          if (p.id !== playlistId) return p
+          const newSongs = p.songs
+            ? [...p.songs, currentSong]
+            : null
+          return { ...p, song_count: p.song_count + 1, songs: newSongs }
+        })
+      )
+      closePlaylistModal()
+    } catch (err) {
+      // 409 或 400 表示歌已在清單中
+      console.error("加入清單失敗", err)
+      closePlaylistModal()
+    }
   }
 
-  const handleCreatePlaylist = () => {
+  const handleCreatePlaylist = async () => {
     const trimmedName = newPlaylistName.trim()
 
     if (!trimmedName) {
@@ -378,7 +548,7 @@ export default function HomePage() {
     }
 
     const duplicated = customPlaylists.some(
-      (playlist) => playlist.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      (playlist) => playlist.playlist_name.trim().toLowerCase() === trimmedName.toLowerCase()
     )
 
     if (duplicated) {
@@ -386,15 +556,47 @@ export default function HomePage() {
       return
     }
 
-    const newPlaylist = {
-      id: Date.now(),
-      name: trimmedName,
-      icon: selectedPlaylistIcon,
-      songs: currentSong ? [currentSong] : [],
+    try {
+      const newPlaylist = await createPlaylist(trimmedName)
+      if (currentSong) {
+        await addSongToPlaylist(newPlaylist.id, currentSong.id)
+        setCustomPlaylists((prev) => [...prev, {
+          ...newPlaylist, icon: selectedPlaylistIcon,
+          song_count: 1, songs: [currentSong],
+        }])
+      } else {
+        setCustomPlaylists((prev) => [...prev, {
+          ...newPlaylist, icon: selectedPlaylistIcon, songs: null,
+        }])
+      }
+      closePlaylistModal()
+    } catch (err) {
+      console.error("建立清單失敗", err)
+      setPlaylistNameError("Failed to create playlist")
+    }
+  }
+
+  // 展開自訂清單時 lazy load 歌曲
+  const handleToggleCustomPlaylist = async (playlistId) => {
+    if (openCustomPlaylistId === playlistId) {
+      setOpenCustomPlaylistId(null)
+      return
     }
 
-    setCustomPlaylists((prev) => [...prev, newPlaylist])
-    closePlaylistModal()
+    setOpenCustomPlaylistId(playlistId)
+
+    // 如果 songs 尚未載入，從 API 取得
+    const playlist = customPlaylists.find((p) => p.id === playlistId)
+    if (playlist && playlist.songs === null) {
+      try {
+        const songs = await getPlaylistSongs(playlistId)
+        setCustomPlaylists((prev) =>
+          prev.map((p) => (p.id === playlistId ? { ...p, songs } : p))
+        )
+      } catch (err) {
+        console.error("載入清單歌曲失敗", err)
+      }
+    }
   }
     // ⭐ 刪除收藏
   const handleDeleteFromFavorites = async () => {
@@ -418,6 +620,34 @@ export default function HomePage() {
       })
     )
   }
+
+  // 搜尋（debounce 300ms）
+  const handleSearchChange = useCallback((value) => {
+    setSearchQuery(value)
+
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current)
+    }
+
+    if (!value.trim()) {
+      setSearchResults([])
+      setIsSearching(false)
+      return
+    }
+
+    setIsSearching(true)
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await searchSongs(value.trim())
+        setSearchResults(results)
+      } catch (err) {
+        console.error("搜尋失敗", err)
+        setSearchResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    }, 300)
+  }, [])
 
   return (
     <div className="home-page">
@@ -451,7 +681,7 @@ export default function HomePage() {
           {/* 展開的歌曲清單 */}
           {isPlaylistOpen && (
             <ul className="playlist">
-              {favorites.map((song) => (
+              {favorites.map((song, idx) => (
                 <li
                   key={song.id}
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
@@ -496,11 +726,11 @@ export default function HomePage() {
 
           {isHistoryOpen && (
             <ul className="playlist">
-              {historySongs.map((song) => (
+              {historySongs.map((song, idx) => (
                 <li
                   key={song.id}
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
-                  onClick={() => handlePlay(song)}
+                  onClick={() => handlePlayFromQueue(historySongs, idx, HISTORY_SOURCE.PLAYLIST)}
                 >
                   {song.song_title}
                 </li>
@@ -511,19 +741,15 @@ export default function HomePage() {
             <div key={playlist.id}>
               <button
                 className={`playlist-card ${openCustomPlaylistId === playlist.id ? "open" : ""}`}
-                onClick={() =>
-                  setOpenCustomPlaylistId((prev) =>
-                    prev === playlist.id ? null : playlist.id
-                  )
-                }
+                onClick={() => handleToggleCustomPlaylist(playlist.id)}
               >
                 <div className="playlist-card-thumb">
                   <img src={`/album_icon/${playlist.icon || PLAYLIST_ICONS[0]}`} alt={playlist.name} />
                 </div>
                 <div className="playlist-card-info">
-                  <span className="playlist-card-name">{playlist.name}</span>
+                  <span className="playlist-card-name">{playlist.playlist_name}</span>
                   <span className="playlist-card-meta">
-                    播放清單 • {playlist.songs.length} 首歌曲
+                    播放清單 • {playlist.song_count} 首歌曲
                   </span>
                 </div>
                 <span className="playlist-card-chevron">
@@ -533,8 +759,10 @@ export default function HomePage() {
 
               {openCustomPlaylistId === playlist.id && (
                 <ul className="playlist">
-                  {playlist.songs.length > 0 ? (
-                    playlist.songs.map((song) => (
+                  {playlist.songs === null ? (
+                    <li className="playlist-item empty-playlist-item">載入中...</li>
+                  ) : playlist.songs.length > 0 ? (
+                    playlist.songs.map((song, idx) => (
                       <li
                         key={song.id}
                         className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
@@ -621,7 +849,7 @@ export default function HomePage() {
                   <div
                     key={song.id}
                     className={`song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                    onClick={() => handlePlay(song)}
+                    onClick={() => { queueRef.current = null; handlePlay(song, HISTORY_SOURCE.RECOMMENDATION) }}
                   >
                     <p className="song-card-title">{song.song_title}</p>
                     <p className="song-card-artist">{song.artist_name}</p>
@@ -643,7 +871,7 @@ export default function HomePage() {
                     <div
                       key={song.id}
                       className={`small-song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                      onClick={() => handlePlay(song)}
+                      onClick={() => { queueRef.current = null; handlePlay(song, HISTORY_SOURCE.RECOMMENDATION) }}
                     >
                       <p className="small-song-title">{song.song_title}</p>
                       <p className="small-song-artist">{song.artist_name}</p>
@@ -667,11 +895,15 @@ export default function HomePage() {
                       key={item.id}
                       className="friend-card"
                       onClick={() => {
-                        handlePlay({
-                          id: item.id,
-                          song_title: item.song_title,
-                          artist_name: item.artist_name,
-                        })
+                        queueRef.current = null
+                        handlePlay(
+                          {
+                            id: item.id,
+                            song_title: item.song_title,
+                            artist_name: item.artist_name,
+                          },
+                          HISTORY_SOURCE.FRIEND,
+                        )
                       }}
                     >
                       <p className="friend-name">{item.friend_name}</p>
@@ -692,7 +924,7 @@ export default function HomePage() {
             </section>
           )}
 
-          {/* Search 視圖：假 UI（B 負責）*/}
+          {/* Search 視圖 */}
           {view === "search" && (
             <section className="search-view">
               <div className="search-bar-wrap">
@@ -700,12 +932,40 @@ export default function HomePage() {
                   className="search-input"
                   type="text"
                   placeholder="搜尋歌曲、藝人..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                 />
                 <button className="search-btn">
                   <img src="/search.svg" alt="search" />
                 </button>
               </div>
-              <p className="search-hint">輸入關鍵字開始搜尋</p>
+
+              {!searchQuery.trim() && !isSearching && searchResults.length === 0 && (
+                <p className="search-hint">輸入關鍵字開始搜尋</p>
+              )}
+
+              {isSearching && (
+                <p className="search-hint">搜尋中...</p>
+              )}
+
+              {!isSearching && searchQuery.trim() && searchResults.length === 0 && (
+                <p className="search-hint">找不到相關結果</p>
+              )}
+
+              {searchResults.length > 0 && (
+                <div className="search-results">
+                  {searchResults.map((song) => (
+                    <div
+                      key={song.id}
+                      className={`song-card ${currentSong?.id === song.id ? "active" : ""}`}
+                      onClick={() => { queueRef.current = null; handlePlay(song, HISTORY_SOURCE.SEARCH) }}
+                    >
+                      <p className="song-card-title">{song.song_title}</p>
+                      <p className="song-card-artist">{song.artist_name}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
@@ -734,10 +994,7 @@ export default function HomePage() {
             <div className="player-actions">
               <button
                 className={`action-btn-new ${liked ? "active" : ""}`}
-                onClick={() => {
-                  setLiked(prev => !prev)
-                  setDisliked(false)  
-                }}
+                onClick={() => handleToggleLike(true)}
                 title="喜歡"
               >
                 <img src="/good.svg" alt="like" className="good-icon" />
@@ -745,10 +1002,7 @@ export default function HomePage() {
 
               <button
                 className={`action-btn-new ${disliked ? "active" : ""}`}
-                onClick={() => {
-                  setDisliked(prev => !prev)
-                  setLiked(false)   
-                }}
+                onClick={() => handleToggleLike(false)}
                 title="不喜歡"
               >
                 <img src="/bad.svg" alt="dislike" className="bad-icon" />
@@ -769,6 +1023,14 @@ export default function HomePage() {
                 disabled={!currentSong}
               >
                 <img src="/add.svg" alt="add" className="add-icon" />
+              </button>
+
+              <button
+                className={`action-btn-new ${isLooping ? "active" : ""}`}
+                title="單曲循環"
+                onClick={toggleLoop}
+              >
+                <img src="/repeat.svg" alt="repeat" className="repeat-icon" />
               </button>
 
             </div>
@@ -837,7 +1099,22 @@ export default function HomePage() {
                   onReady={(e) => {
                     playerRef.current = e.target
                   }}
-                  onEnd={() => setIsPlaying(false)}
+                  onEnd={() => {
+                    if (isLoopingRef.current) {
+                      playerRef.current?.seekTo(0)
+                      playerRef.current?.playVideo()
+                      return
+                    }
+                    const q = queueRef.current
+                    if (q && q.songs.length > 1) {
+                      const nextIndex = (q.index + 1) % q.songs.length
+                      queueRef.current = { songs: q.songs, index: nextIndex }
+                      handlePlay(q.songs[nextIndex], HISTORY_SOURCE.PLAYLIST)
+                      return
+                    }
+                    flushCurrentHistory()
+                    setIsPlaying(false)
+                  }}
                 />
               )}
             </div>
@@ -960,9 +1237,9 @@ export default function HomePage() {
                       </div>
 
                       <div className="playlist-modal-item-info">
-                        <span className="playlist-modal-item-name">{playlist.name}</span>
+                        <span className="playlist-modal-item-name">{playlist.playlist_name}</span>
                         <span className="playlist-modal-item-count">
-                          {playlist.songs.length} 首歌曲
+                          {playlist.song_count} 首歌曲
                         </span>
                       </div>
                     </button>
