@@ -1239,9 +1239,9 @@ button:focus, button:focus-visible { outline: none; box-shadow: none; }
 
 .playlist-input-row {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  flex-direction: column;   /* ⭐加這行 */
+  align-items: flex-start;
+  gap: 6px;                 /* ⭐直接產生距離 */
 }
 
 .playlist-name-input {
@@ -1362,24 +1362,45 @@ button:focus, button:focus-visible { outline: none; box-shadow: none; }
 }
 
 .delete-modal {
-  width: 400px;
+  width: 500px;              /* ⭐ 固定寬度 */
+  max-width: 90vw;
+
   background: #a9d6f5;
   border-radius: 20px;
-  padding: 20px;
+  padding: 24px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+
+  max-height: 80vh;          /* ⭐ 高度限制 */
+  overflow-y: auto;          /* ⭐ 上下滑 */
 }
 
 .delete-modal-header {
+  position: relative;   /* ⭐關鍵 */
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: center;  /* ⭐只負責標題置中 */
+}
+
+.delete-modal-header .back-btn {
+  position: absolute;
+  left: 0;
+}
+
+.delete-modal-header button:last-child {
+  position: absolute;
+  right: 0;
 }
 
 .delete-btn {
   margin-top: 30px;
   width: 100%;
+  flex-shrink: 0; 
   padding: 12px;
   background: #6e6fe0;
-  color: #a9d6f5;
+  color: #ffffff;
   border: none;
   border-radius: 12px;
   cursor: pointer;
@@ -1397,4 +1418,56 @@ button:focus, button:focus-visible { outline: none; box-shadow: none; }
 
 .delete-modal-header button:hover {
   background: rgba(255,255,255,0.3);
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);/* ⭐一排6個 */
+  gap: 12px;
+  margin-top: 20px;
+  max-width: 100%;      /* ⭐防止超出 */
+}
+
+.back-btn {
+  background: transparent;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.input-wrapper {
+  position: relative;
+  margin-top: 8px;  
+}
+
+.input-error {
+  margin-top: 8px;
+
+  background: #f7b6b6;
+  color: #b00020;
+
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+
+  display: inline-block;
+}
+
+input {
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+  border: 2px solid #5d6bd6;
+  padding: 10px 14px;
+}
+
+
+input:focus {
+  border-color: #1d179a;
+}
+
+.playlist-card-name:hover {
+  color: #ff567a;
+  transform: translateX(2px);   /* ⭐微動 */
 }

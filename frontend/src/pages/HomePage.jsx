@@ -6,6 +6,7 @@ import {
   getPlaylists, createPlaylist, getPlaylistSongs, addSongToPlaylist,
   removeSongFromPlaylist, 
   searchSongs,
+  updatePlaylist, deletePlaylist,  
 } from "../api/songs"
 import { searchYouTubeVideoId } from "../api/youtube"
 import { getHistory, createHistory, updateHistory, HISTORY_SOURCE } from "../api/history"
@@ -78,6 +79,8 @@ const PLAYLIST_ICONS = [
 
 // ─────────────────────────────────────────────────────
 export default function HomePage() {
+
+  const [nameError, setNameError] = useState("")
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [selectedSong, setSelectedSong] = useState(null)
@@ -175,6 +178,15 @@ export default function HomePage() {
   const [customPlaylists, setCustomPlaylists] = useState([])
   // Each playlist: { id, playlist_name, song_count, songs: [...] | null }
   // songs 為 null 表示尚未載入（lazy load）
+
+  const [isEditPlaylistModalOpen, setIsEditPlaylistModalOpen] = useState(false)
+  const [editingPlaylist, setEditingPlaylist] = useState(null)
+
+  const [editView, setEditView] = useState("menu") 
+  // "menu" | "name" | "icon"
+
+  const [editName, setEditName] = useState("")
+  const [editIcon, setEditIcon] = useState(null)
 
   const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false)
   const [playlistModalView, setPlaylistModalView] = useState("list")
@@ -757,7 +769,20 @@ export default function HomePage() {
                   <img src={`/album_icon/${playlist.playlist_icon || PLAYLIST_ICONS[0]}`} alt={playlist.playlist_name} />
                 </div>
                 <div className="playlist-card-info">
-                  <span className="playlist-card-name">{playlist.playlist_name}</span>
+                  <span
+                    className="playlist-card-name"
+                    onClick={(e) => {
+                      e.stopPropagation()
+
+                      setEditingPlaylist(playlist)
+                      setEditName(playlist.playlist_name)
+                      setEditIcon(playlist.playlist_icon || PLAYLIST_ICONS[0])
+                      setEditView("menu")
+                      setIsEditPlaylistModalOpen(true)
+                    }}
+                  >
+                    {playlist.playlist_name}
+                  </span>
                   <span className="playlist-card-meta">
                     播放清單 • {playlist.song_count} 首歌曲
                   </span>
@@ -1368,7 +1393,163 @@ export default function HomePage() {
 
           </div>
         </div>
-      )}      
+      )}    
+      {isEditPlaylistModalOpen && (
+        <div className="delete-modal-overlay">
+          <div className="delete-modal">
+
+            {/* Header */}
+            <div className="delete-modal-header">
+
+              {editView !== "menu" && (
+                <button
+                  className="back-btn"
+                  onClick={() => setEditView("menu")}
+                >
+                  ←
+                </button>
+              )}
+
+              <h2>
+                {editView === "menu" && editingPlaylist?.playlist_name}
+                {editView === "name" && "Change Playlist Name"}
+                {editView === "icon" && "Change Playlist Icon"}
+              </h2>
+
+              <button onClick={() => setIsEditPlaylistModalOpen(false)}>×</button>
+
+            </div>
+
+            {/* 主選單 */}
+            {editView === "menu" && (
+              <>
+                <button
+                  className="delete-btn"
+                  onClick={() => setEditView("name")}
+                >
+                  Change Playlist Name
+                </button>
+
+                <button
+                  className="delete-btn"
+                  onClick={() => setEditView("icon")}
+                >
+                  Change Playlist Icon
+                </button>
+
+                <button
+                  className="delete-btn"
+                  onClick={async () => {
+                    await deletePlaylist(editingPlaylist.id)
+
+                    setCustomPlaylists(prev =>
+                      prev.filter(p => p.id !== editingPlaylist.id)
+                    )
+
+                    setIsEditPlaylistModalOpen(false)
+                  }}
+                >
+                  Delete Playlist
+                </button>
+              </>
+            )}
+
+            {/* 改名稱 */}
+            {editView === "name" && (
+              <>
+                <div>
+                  <input
+                    value={editName}
+                    onChange={(e) => {
+                      setEditName(e.target.value)
+                      setNameError("")   // ⭐打字時清掉錯誤
+                    }}
+                    placeholder="Please fill out"
+                  />
+
+                  {nameError && (
+                    <div style={{
+                      background: "#f7b6b6",
+                      color: "#b00020",
+                      padding: "6px 10px",
+                      borderRadius: "10px",
+                      marginTop: "6px",
+                      display: "inline-block"
+                    }}>
+                      {nameError}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  className="delete-btn"
+                  onClick={async () => {
+                    if (!editName.trim()) {
+                      setNameError("Please fill out")
+                      return
+                    }
+
+                    await updatePlaylist(editingPlaylist.id, editName)
+
+                    setCustomPlaylists(prev =>
+                      prev.map(p =>
+                        p.id === editingPlaylist.id
+                          ? { ...p, playlist_name: editName }
+                          : p
+                      )
+                    )
+
+                    setIsEditPlaylistModalOpen(false)
+                  }}
+                >
+                  Change
+                </button>
+              </>
+            )}
+
+            {/* 改 icon */}
+            {editView === "icon" && (
+              <>
+                <div className="icon-grid">
+                  {PLAYLIST_ICONS.map(icon => (
+                    <img
+                      key={icon}
+                      src={`/album_icon/${icon}`}
+                      onClick={() => setEditIcon(icon)}
+                      style={{
+                        width: 90,
+                        height: 90,            // ⭐加這行（固定高度）
+                        objectFit: "contain",  // ⭐加這行（不變形）
+                        border: editIcon === icon ? "2px solid blue" : "none",
+                        borderRadius: 8,
+                        cursor: "pointer"
+                      }}
+                    />
+                  ))}
+                </div>
+
+                <button
+                  className="delete-btn"
+                  onClick={() => {
+                    setCustomPlaylists(prev =>
+                      prev.map(p =>
+                        p.id === editingPlaylist.id
+                          ? { ...p, playlist_icon: editIcon }
+                          : p
+                      )
+                    )
+
+                    setIsEditPlaylistModalOpen(false)
+                  }}
+                >
+                  Change
+                </button>
+              </>
+            )}
+
+          </div>
+        </div>
+      )}  
     </div>
   )
 }
