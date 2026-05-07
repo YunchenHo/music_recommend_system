@@ -11,6 +11,8 @@ import {
 import { searchYouTubeVideoId } from "../api/youtube"
 import { getHistory, createHistory, updateHistory, HISTORY_SOURCE } from "../api/history"
 import { toggleLike, getLikeStatus } from "../api/likes"
+import { logoutUser } from "../api/auth"
+import { useNavigate } from "react-router-dom"
 
 // ── 推薦歌曲（從 API 取得）
 
@@ -79,6 +81,26 @@ const PLAYLIST_ICONS = [
 
 // ─────────────────────────────────────────────────────
 export default function HomePage() {
+
+  const navigate = useNavigate()
+
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+
+  const handleLogout = async () => {
+    try {
+      const res = await logoutUser()
+
+      console.log("logout success", res)
+
+      navigate("/")
+    } catch (err) {
+      console.log(err)
+      console.log(err.response)
+      console.log(err.response?.data)
+
+      alert("logout failed")
+    }
+  }
 
   const [nameError, setNameError] = useState("")
 
@@ -216,6 +238,9 @@ export default function HomePage() {
     ...FAKE_REVISIT,
     ...FAKE_REVISIT,
   ].slice(revisitStart, revisitStart + CARD_PAGE_SIZE)
+
+  const isRevisitUnlocked = historySongs.length >= 5
+  const isFriendsUnlocked = historySongs.length >= 10
 
   const friendVisible = [
     ...FAKE_FRIENDS,
@@ -863,13 +888,40 @@ export default function HomePage() {
 
           {/* 右：用戶資訊 */}
           <div className="navbar-user">
-            <span className="navbar-greeting">一起嗨吧！{user.nickname}</span>
-            <div className="avatar">
+            <span className="navbar-greeting">
+              一起嗨吧！{user.nickname}
+            </span>
+
+            <div
+              className="avatar"
+              onClick={() => setIsUserMenuOpen((prev) => !prev)}
+            >
               {user.profilePicture
                 ? <img src={user.profilePicture} alt="avatar" />
                 : <span className="avatar-placeholder">🐰</span>
               }
             </div>
+
+            {isUserMenuOpen && (
+              <>
+                <div
+                  className="user-dropdown-overlay"
+                  onClick={() => setIsUserMenuOpen(false)}
+                />
+                <div className="user-dropdown">
+                  <div className="user-dropdown-name">
+                    {user.nickname}
+                  </div>
+
+                  <button
+                    className="logout-btn"
+                    onClick={handleLogout}
+                  >
+                    Log Out
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </nav>
 
@@ -894,67 +946,113 @@ export default function HomePage() {
 
               {/* 重溫舊愛 */}
               <section className="sub-section">
-                <div className="sub-section-header">
-                  <h3 className="sub-section-title">重溫舊愛</h3>
-                  <button className="more-btn" onClick={handleNextRevisit}>
-                    more &gt;
-                  </button>
-                </div>
 
-                <div className="horizontal-card-list">
-                  {revisitVisible.map((song) => (
-                    <div
-                      key={song.id}
-                      className={`small-song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                      onClick={() => { queueRef.current = null; handlePlay(song, HISTORY_SOURCE.RECOMMENDATION) }}
-                    >
-                      <p className="small-song-title">{song.song_title}</p>
-                      <p className="small-song-artist">{song.artist_name}</p>
+                {isRevisitUnlocked ? (
+                  <>
+                    <div className="sub-section-header">
+                      <h3 className="sub-section-title">重溫舊愛</h3>
+
+                      <button className="more-btn" onClick={handleNextRevisit}>
+                        more &gt;
+                      </button>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="horizontal-card-list">
+                      {revisitVisible.map((song) => (
+                        <div
+                          key={song.id}
+                          className={`small-song-card ${currentSong?.id === song.id ? "active" : ""}`}
+                          onClick={() => {
+                            queueRef.current = null
+                            handlePlay(song, HISTORY_SOURCE.RECOMMENDATION)
+                          }}
+                        >
+                          <p className="small-song-title">{song.song_title}</p>
+                          <p className="small-song-artist">{song.artist_name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="revisit-locked">
+                    <p className="revisit-locked-text">
+                      UNLOCK AFTER 5 SONGS
+                    </p>
+
+                    <p className="revisit-locked-sub">
+                      {historySongs.length} / 5 songs listened
+                    </p>
+                  </div>
+                )}
+
               </section>
 
               {/* 你的朋友也在聽 */}
               <section className="sub-section">
-                <div className="sub-section-header">
-                  <h3 className="sub-section-title">你的朋友也在聽</h3>
-                  <button className="more-btn" onClick={handleNextFriend}>
-                    more &gt;
-                  </button>
-                </div>
 
-                <div className="horizontal-card-list">
-                  {friendVisible.slice(0, 3).map((item) => (
-                    <div
-                      key={item.id}
-                      className="friend-card"
-                      onClick={() => {
-                        queueRef.current = null
-                        handlePlay(
-                          {
-                            id: item.id,
-                            song_title: item.song_title,
-                            artist_name: item.artist_name,
-                          },
-                          HISTORY_SOURCE.FRIEND,
-                        )
-                      }}
-                    >
-                      <p className="friend-name">{item.friend_name}</p>
-                      <p className="friend-song">{item.song_title}</p>
-                      {item.artist_name && <p className="friend-artist">{item.artist_name}</p>}
+                {isFriendsUnlocked ? (
+                  <>
+                    <div className="sub-section-header">
+                      <h3 className="sub-section-title">你的朋友也在聽</h3>
+
+                      <button className="more-btn" onClick={handleNextFriend}>
+                        more &gt;
+                      </button>
                     </div>
-                  ))}
 
-                  <button
-                    className="friend-card search-friend-card"
-                    onClick={openFriendsModal}
-                    type="button"
-                  >
-                    <p className="friend-search-text">Search Your Friends!</p>
-                  </button>
-                </div>
+                    <div className="horizontal-card-list">       
+                      {friendVisible.slice(0, 3).map((item) => (
+                        <div
+                          key={item.id}
+                          className="friend-card"
+                          onClick={() => {
+                            queueRef.current = null
+
+                            handlePlay(
+                              {
+                                id: item.id,
+                                song_title: item.song_title,
+                                artist_name: item.artist_name,
+                              },
+                              HISTORY_SOURCE.FRIEND,
+                            )
+                          }}
+                        >
+                          <p className="friend-name">{item.friend_name}</p>
+                          <p className="friend-song">{item.song_title}</p>
+
+                          {item.artist_name && (
+                            <p className="friend-artist">
+                              {item.artist_name}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+
+                      <button
+                        className="friend-card search-friend-card"
+                        onClick={openFriendsModal}
+                        type="button"
+                      >
+                        <p className="friend-search-text">
+                          Search Your Friends!
+                        </p>
+                      </button>
+                                
+                    </div>
+                  </>
+                ) : (
+                  <div className="revisit-locked">
+                    <p className="revisit-locked-text">
+                      UNLOCK AFTER 10 SONGS
+                    </p>
+
+                    <p className="revisit-locked-sub">
+                      {historySongs.length} / 10 songs listened
+                    </p>
+                  </div>
+                )}
+
               </section>
             </section>
           )}
