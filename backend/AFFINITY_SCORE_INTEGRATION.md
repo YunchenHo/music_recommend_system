@@ -4,6 +4,131 @@
 
 ---
 
+## 0. 快速上手（先看這裡）
+
+### 0.1 你需要知道的核心觀念
+
+推薦結果由**兩層資料**組成，兩層都會影響使用者看到的推薦：
+
+```
+[層 1] ItemKNN 批次              [層 2] Affinity 分數
+  RecommendationBatch       ×       UserSongAffinity
+  (依 onboarding 種子算)            (依 like/收藏/聽歌秒數算)
+       │                                  │
+       └─────────────┬────────────────────┘
+                     ▼
+       GET /api/songs/recommendations
+       回傳：依 final = itemknn × (1 + affinity) 重排後的前 9 首
+       過濾：affinity < -0.5 的歌不出現
+```
+
+> ⚠️ **兩層都是離線計算**。使用者按 like/dislike/收藏、聽完一首歌之後，DB 中 `UserSongLike` / `History` 等原始紀錄會即時寫入，但**`UserSongAffinity` 不會自動更新**。要看到推薦變化，必須手動觸發重算。
+
+### 0.2 最常見情境
+
+#### 情境 A：使用者按了 like / dislike / 收藏，畫面沒變？
+
+```bash
+# 步驟 1：重算該使用者的 affinity（讀 like/收藏/歷史 → 寫入 UserSongAffinity）
+docker compose exec backend uv run python manage.py refresh_affinity_scores --user <user_id>
+
+# 步驟 2：前端 F5 重新整理，HomePage 會重新打 GET /api/songs/recommendations
+```
+
+`<user_id>` 是該使用者在 `users_user` 表的主鍵（不是 email、不是 google_id）。查找方式：
+
+```bash
+docker compose exec backend uv run python manage.py shell -c "
+from users.models import User
+for u in User.objects.all(): print(u.id, u.email, u.nickname)
+"
+```
+
+#### 情境 B：onboarding 選了新種子歌，想重算 ItemKNN 候選
+
+兩個方法擇一：
+
+```bash
+# 方法 1（推薦）：透過 onboarding API 重送，後端會自動觸發 ItemKNN 重算
+# POST /api/onboarding/submit  with { artist_ids, song_ids }
+
+# 方法 2：直接呼叫 helper
+docker compose exec backend uv run python manage.py shell -c "
+from users.models import User
+from users.onboarding_itemknn_store import refresh_stored_itemknn_recommendations
+refresh_stored_itemknn_recommendations(User.objects.get(id=<user_id>), top_n=30)
+"
+```
+
+#### 情境 C：完整重算（包含 ItemKNN + Affinity）
+
+```bash
+# 1. 重算 ItemKNN 候選
+docker compose exec backend uv run python manage.py shell -c "
+from users.models import User
+from users.onboarding_itemknn_store import refresh_stored_itemknn_recommendations
+refresh_stored_itemknn_recommendations(User.objects.get(id=<user_id>), top_n=30)
+"
+
+# 2. 重算 Affinity
+docker compose exec backend uv run python manage.py refresh_affinity_scores --user <user_id>
+
+# 3. 前端 F5
+```
+
+#### 情境 D：批次重算所有使用者的 affinity
+
+```bash
+docker compose exec backend uv run python manage.py refresh_affinity_scores
+```
+
+未來如果要接 cron / Celery 排程，從這個指令切入即可。
+
+### 0.3 怎麼確認重排「真的有發生」
+
+跑下面這段，把 `<user_id>` 換成你要看的使用者：
+
+```bash
+docker compose exec backend uv run python manage.py shell -c "
+from users.models import RecommendationBatch, RecommendationItem, UserSongAffinity
+from users.affinity_score import AFFINITY_FILTER_THRESHOLD
+
+USER_ID = <user_id>
+batch = RecommendationBatch.objects.filter(user_id=USER_ID).order_by('-generated_at').first()
+items = list(RecommendationItem.objects.filter(batch=batch).select_related('song'))
+aff = dict(UserSongAffinity.objects.filter(user_id=USER_ID).values_list('song_id', 'score'))
+
+print('=== 過濾掉的歌 ===')
+for it in items:
+    a = aff.get(it.song_id, 0.0)
+    if a < AFFINITY_FILTER_THRESHOLD:
+        print(f'  song={it.song_id} {it.song.song_title!r} aff={a:+.2f}')
+
+rer = []
+for it in items:
+    a = aff.get(it.song_id, 0.0)
+    if a < AFFINITY_FILTER_THRESHOLD: continue
+    rer.append((it.score * (1 + a), it))
+rer.sort(key=lambda x: -x[0])
+print('=== API 會回的前 9 首 ===')
+for i, (final, it) in enumerate(rer[:9], 1):
+    a = aff.get(it.song_id, 0.0)
+    print(f'  {i}. {it.song.song_title!r} final={final:.4f} (knn={it.score:.4f} × (1{a:+.2f}))')
+"
+```
+
+### 0.4 疑難排解
+
+| 症狀 | 原因 | 解法 |
+|------|------|------|
+| 按了 dislike 但歌還是出現 | `UserSongAffinity` 還是舊資料 | 跑 `refresh_affinity_scores --user <id>` 後 F5 |
+| `refresh_affinity_scores` 跑了 0 rows | 該使用者沒有 like / 收藏 / 歷史紀錄 | 先操作幾首歌再跑 |
+| 前端推薦完全空白 | 沒有 `RecommendationBatch`（onboarding 種子未產生 ItemKNN 結果） | 重做 onboarding 或檢查 `ITEMKNN_ARTIFACT_PATH` |
+| 改了 model 後容器啟動失敗 | 缺 migration | 在本機 `python manage.py makemigrations`，commit migration 檔，重啟容器 |
+| 跑 management command 報 `User does not exist` | `<user_id>` 是錯的 | 用 0.2 中的指令查正確 id |
+
+---
+
 ## 1. 架構概覽
 
 | 元件 | 路徑 | 說明 |
