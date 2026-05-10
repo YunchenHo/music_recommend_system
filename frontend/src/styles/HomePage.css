@@ -22,6 +22,7 @@
    整體 3 欄 Layout
    ══════════════════════════════════════════ */
 * { box-sizing: border-box; margin: 0; padding: 0; }
+button:focus, button:focus-visible { outline: none; box-shadow: none; }
 
 .home-page {
   display: flex;
@@ -619,6 +620,11 @@
   height: 26px;
 }
 
+.repeat-icon {
+  width: 26px;
+  height: 26px;
+}
+
 /* 加入播放清單按鈕 */
 /*
 .add-playlist-btn {
@@ -628,6 +634,40 @@
   border-color: var(--pink-border);
 }
 */
+/* 上一首 / 下一首按鈕列 */
+.player-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 6px;
+}
+
+.skip-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--pink-border);
+  background-color: var(--pink-light);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease, transform 0.15s ease;
+}
+
+.skip-btn:hover {
+  background-color: var(--pink-hover);
+  transform: scale(1.1);
+}
+
+.skip-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  object-fit: contain;
+}
+
 /* 播放 / 暫停按鈕 */
 .play-btn {
   width: 54px;
@@ -641,7 +681,6 @@
   align-items: center;
   justify-content: center;
   transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
-  margin-top: 6px;
 }
 
 .play-btn:hover {
@@ -659,6 +698,7 @@
 
 .action-btn-new {
   border: none;
+  outline: none;
   background: transparent;
   padding: 8px;
   cursor: pointer;
@@ -1232,13 +1272,13 @@
 
 .playlist-input-row {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  flex-direction: column;   /* ⭐加這行 */
+  align-items: flex-start;
+  gap: 6px;                 /* ⭐直接產生距離 */
 }
 
 .playlist-name-input {
-  flex: 1;
+  width: 100%;
   min-width: 240px;
   height: 48px;
   border: 2px solid #5d6bd6;
@@ -1329,5 +1369,242 @@
   margin-top: 4px;
   font-size: 0.75rem;
   color: #e75480;
+  font-weight: 600;
+}
+
+.playlist-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.playlist-more {
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px 8px;
+}
+
+.delete-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.delete-modal {
+  width: 500px;              /* ⭐ 固定寬度 */
+  max-width: 90vw;
+
+  background: #a9d6f5;
+  border-radius: 20px;
+  padding: 24px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+
+  max-height: 80vh;          /* ⭐ 高度限制 */
+  overflow-y: auto;          /* ⭐ 上下滑 */
+}
+
+.delete-modal-header {
+  position: relative;   /* ⭐關鍵 */
+  display: flex;
+  align-items: center;
+  justify-content: center;  /* ⭐只負責標題置中 */
+}
+
+.delete-modal-header .back-btn {
+  position: absolute;
+  left: 0;
+}
+
+.delete-modal-header button:last-child {
+  position: absolute;
+  right: 0;
+}
+
+.delete-btn {
+  margin-top: 30px;
+  width: 100%;
+  flex-shrink: 0; 
+  padding: 12px;
+  background: #6e6fe0;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.delete-modal-header button {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.delete-modal-header button:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);/* ⭐一排6個 */
+  gap: 12px;
+  margin-top: 20px;
+  max-width: 100%;      /* ⭐防止超出 */
+}
+
+.back-btn {
+  background: transparent;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.input-wrapper {
+  position: relative;
+  margin-top: 8px;  
+}
+
+.input-error {
+  margin-top: 8px;
+
+  background: #f7b6b6;
+  color: #b00020;
+
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+
+  display: inline-block;
+}
+
+input {
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+  border: 2px solid #5d6bd6;
+  padding: 10px 14px;
+}
+
+
+input:focus {
+  border-color: #1d179a;
+}
+
+.playlist-card-name:hover {
+  color: #ff567a;
+  transform: translateX(2px);   /* ⭐微動 */
+}
+
+
+
+
+.navbar-user {
+  position: relative;
+  cursor: pointer;
+}
+
+.user-dropdown-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+}
+
+/* dropdown */
+.user-dropdown {
+  position: absolute;
+  top: 58px;
+  right: 0;
+
+  width: 220px;
+
+  background: #bfe0ff;
+  border: 3px solid #5d6bd6;
+  border-radius: 22px;
+
+  padding: 20px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+
+  z-index: 9999;
+
+  box-shadow: 0 10px 24px rgba(0,0,0,0.15);
+}
+
+.user-dropdown-name {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #4b2ca3;
+
+  word-break: break-word;
+}
+
+/* logout button */
+.logout-btn {
+  width: 100%;
+
+  border: none;
+  border-radius: 16px;
+
+  background: #6e6fe0;
+  color: white;
+
+  font-size: 1.6rem;
+  font-weight: 700;
+
+  padding: 14px 0;
+
+  cursor: pointer;
+
+  transition: transform 0.15s ease,
+              background 0.2s ease;
+}
+
+.logout-btn:hover {
+  background: #5d5fd6;
+  transform: translateY(-2px);
+}
+
+.revisit-locked {
+  width: 100%;
+  min-height: 150px;
+
+  border-radius: 24px;
+
+  background: #f56f8a;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  box-shadow: 0 8px 20px rgba(245, 111, 138, 0.25);
+}
+
+.revisit-locked-text {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: white;
+
+  letter-spacing: 4px;
+}
+
+.revisit-locked-sub {
+  margin-top: 14px;
+
+  font-size: 1rem;
+  color: rgba(255,255,255,0.9);
+
   font-weight: 600;
 }

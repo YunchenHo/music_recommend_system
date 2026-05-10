@@ -23,6 +23,10 @@ _tmp_dataset/
 !recommender/artifacts/itemknn_artifacts.npz
 !recommender/artifacts/artist_id_map_small.csv
 !recommender/artifacts/song_for_db_small.csv
+# MF 訓練產物太大，明確排除
+recommender/artifacts/mf_*
+recommender/artifacts/*.npy
+recommender/artifacts/*.h5
 
 # Jupyter
 .ipynb_checkpoints/

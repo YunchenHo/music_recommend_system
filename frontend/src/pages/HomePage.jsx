@@ -4,11 +4,15 @@ import "../styles/HomePage.css"
 import {
   getMe, getFavorites, addFavorite, removeFavorite, getRecommendations,
   getPlaylists, createPlaylist, getPlaylistSongs, addSongToPlaylist,
+  removeSongFromPlaylist, 
   searchSongs,
+  updatePlaylist, deletePlaylist,  
 } from "../api/songs"
 import { searchYouTubeVideoId } from "../api/youtube"
 import { getHistory, createHistory, updateHistory, HISTORY_SOURCE } from "../api/history"
 import { toggleLike, getLikeStatus } from "../api/likes"
+import { logoutUser } from "../api/auth"
+import { useNavigate } from "react-router-dom"
 
 // ── 推薦歌曲（從 API 取得）
 
@@ -77,6 +81,34 @@ const PLAYLIST_ICONS = [
 
 // ─────────────────────────────────────────────────────
 export default function HomePage() {
+
+  const navigate = useNavigate()
+
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+
+  const handleLogout = async () => {
+    try {
+      const res = await logoutUser()
+
+      console.log("logout success", res)
+
+      navigate("/")
+    } catch (err) {
+      console.log(err)
+      console.log(err.response)
+      console.log(err.response?.data)
+
+      alert("logout failed")
+    }
+  }
+
+  const [nameError, setNameError] = useState("")
+
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [selectedSong, setSelectedSong] = useState(null)
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState(null)
+  // 'favorites' | 'playlist' | 'history'
+  const [deleteContext, setDeleteContext] = useState("favorites")
   // 目前顯示的頁面：'home' | 'search'
   const [view, setView] = useState("home")
 
@@ -106,9 +138,17 @@ export default function HomePage() {
     createPromise: null,
   })
 
+  // 單曲循環
+  const [isLooping, setIsLooping] = useState(false)
+  const isLoopingRef = useRef(false)
+
+  // 清單循環播放佇列：{ songs: [], index: number } | null
+  const queueRef = useRef(null)
+
   const [youtubeVideoId, setYoutubeVideoId] = useState(null)
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
   const playerRef = useRef(null)
+  const lastTimeRef = useRef(0)
 
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -118,7 +158,9 @@ export default function HomePage() {
     if (isPlaying) {
       progressIntervalRef.current = setInterval(() => {
         if (playerRef.current) {
-          setCurrentTime(playerRef.current.getCurrentTime() || 0)
+          const t = playerRef.current.getCurrentTime() || 0
+          lastTimeRef.current = t
+          setCurrentTime(t)
           setDuration(playerRef.current.getDuration() || 0)
         }
       }, 500)
@@ -164,6 +206,15 @@ export default function HomePage() {
   // Each playlist: { id, playlist_name, song_count, songs: [...] | null }
   // songs 為 null 表示尚未載入（lazy load）
 
+  const [isEditPlaylistModalOpen, setIsEditPlaylistModalOpen] = useState(false)
+  const [editingPlaylist, setEditingPlaylist] = useState(null)
+
+  const [editView, setEditView] = useState("menu") 
+  // "menu" | "name" | "icon"
+
+  const [editName, setEditName] = useState("")
+  const [editIcon, setEditIcon] = useState(null)
+
   const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false)
   const [playlistModalView, setPlaylistModalView] = useState("list")
   // "list" | "create"
@@ -192,6 +243,9 @@ export default function HomePage() {
     ...FAKE_REVISIT,
     ...FAKE_REVISIT,
   ].slice(revisitStart, revisitStart + CARD_PAGE_SIZE)
+
+  const isRevisitUnlocked = historySongs.length >= 5
+  const isFriendsUnlocked = historySongs.length >= 10
 
   const friendVisible = [
     ...FAKE_FRIENDS,
@@ -283,15 +337,18 @@ export default function HomePage() {
       )
       .catch(console.error)
 
-    // 載入歷史紀錄（僅取最近 20 筆）；後端已直接回傳 song_title/artist_name 等
+    // 載入歷史紀錄（取最近 20 筆，去重後過濾使用者手動隱藏的歌）
+    const hiddenHistory = new Set(
+      JSON.parse(localStorage.getItem("hiddenHistory") || "[]")
+    )
     getHistory({ limit: 20 })
       .then((resp) => {
         const items = resp?.data ?? []
-        // 後端已依 played_at desc 排序，但同首歌可能多筆 → 在前端去重保留最新
         const seen = new Set()
         const deduped = []
         for (const it of items) {
           if (seen.has(it.song_id)) continue
+          if (hiddenHistory.has(it.song_id)) continue
           seen.add(it.song_id)
           deduped.push({
             id: it.song_id,
@@ -316,12 +373,7 @@ export default function HomePage() {
 
     if (!snapshot.song || !snapshot.source) return
 
-    let seconds = 0
-    try {
-      seconds = playerRef.current?.getCurrentTime?.() ?? 0
-    } catch {
-      seconds = 0
-    }
+    const seconds = lastTimeRef.current
     // 真的沒播到就不更新（紀錄保持 watch_seconds=0）
     if (!seconds || seconds < 1) return
 
@@ -355,6 +407,8 @@ export default function HomePage() {
     setIsPlaying(true)
     setLiked(false)
     setDisliked(false)
+    setIsLooping(false)
+    isLoopingRef.current = false
 
     // 點到歌就立刻 POST 一筆紀錄（watch_seconds=0），確保即使馬上 refresh 也不會掉
     const createPromise = createHistory({
@@ -402,6 +456,7 @@ export default function HomePage() {
 
     clearInterval(progressIntervalRef.current)
     playerRef.current = null
+    lastTimeRef.current = 0
     setYoutubeVideoId(null)
     setCurrentTime(0)
     setDuration(0)
@@ -435,6 +490,37 @@ export default function HomePage() {
     } catch (err) {
       console.error("toggle like 失敗", err)
     }
+  }
+
+  // 切換單曲循環
+  const toggleLoop = () => {
+    setIsLooping((prev) => {
+      isLoopingRef.current = !prev
+      return !prev
+    })
+  }
+
+  // 從清單播放：設定佇列並播放指定索引的歌
+  const handlePlayFromQueue = (songs, index, source) => {
+    queueRef.current = { songs, index, source }
+    handlePlay(songs[index], source)
+  }
+
+  // 上一首 / 下一首
+  const handlePrev = () => {
+    const q = queueRef.current
+    if (!q || q.songs.length < 2) return
+    const prevIndex = (q.index - 1 + q.songs.length) % q.songs.length
+    queueRef.current = { ...q, index: prevIndex }
+    handlePlay(q.songs[prevIndex], q.source || HISTORY_SOURCE.PLAYLIST)
+  }
+
+  const handleNext = () => {
+    const q = queueRef.current
+    if (!q || q.songs.length < 2) return
+    const nextIndex = (q.index + 1) % q.songs.length
+    queueRef.current = { ...q, index: nextIndex }
+    handlePlay(q.songs[nextIndex], q.source || HISTORY_SOURCE.PLAYLIST)
   }
 
   // 切換播放 / 暫停
@@ -534,7 +620,7 @@ export default function HomePage() {
       if (currentSong) {
         await addSongToPlaylist(newPlaylist.id, currentSong.id)
         setCustomPlaylists((prev) => [...prev, {
-          ...newPlaylist, icon: selectedPlaylistIcon,
+          ...newPlaylist, playlist_icon: selectedPlaylistIcon,
           song_count: 1, songs: [currentSong],
         }])
       } else {
@@ -569,6 +655,46 @@ export default function HomePage() {
       } catch (err) {
         console.error("載入清單歌曲失敗", err)
       }
+    }
+  }
+    // 從歷史紀錄刪除（前端隱藏，後端資料保留供推薦系統使用）
+  const handleDeleteFromHistory = () => {
+    const hidden = JSON.parse(localStorage.getItem("hiddenHistory") || "[]")
+    if (!hidden.includes(selectedSong.id)) {
+      localStorage.setItem("hiddenHistory", JSON.stringify([...hidden, selectedSong.id]))
+    }
+    setHistorySongs((prev) => prev.filter((s) => s.id !== selectedSong.id))
+  }
+
+  // ⭐ 刪除收藏
+  const handleDeleteFromFavorites = async () => {
+    try {
+      await removeFavorite(selectedSong.id)
+      setFavorites(prev => prev.filter(s => s.id !== selectedSong.id))
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  // ⭐ 刪除自訂 playlist
+  const handleDeleteFromCustomPlaylist = async () => {
+    try {
+      // ⭐ 1. 打 API
+      await removeSongFromPlaylist(selectedPlaylistId, selectedSong.id)
+
+      // ⭐ 2. 更新前端
+      setCustomPlaylists(prev =>
+        prev.map(p => {
+          if (p.id !== selectedPlaylistId) return p
+          return {
+            ...p,
+            songs: p.songs.filter(s => s.id !== selectedSong.id),
+            song_count: p.song_count - 1   // ⭐別忘這個
+          }
+        })
+      )
+    } catch (err) {
+      console.error("刪除 playlist 歌曲失敗", err)
     }
   }
 
@@ -632,13 +758,25 @@ export default function HomePage() {
           {/* 展開的歌曲清單 */}
           {isPlaylistOpen && (
             <ul className="playlist">
-              {favorites.map((song) => (
+              {favorites.map((song, idx) => (
                 <li
                   key={song.id}
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
-                  onClick={() => handlePlay(song, HISTORY_SOURCE.PLAYLIST)}
+                  onClick={() => handlePlayFromQueue(favorites, idx, HISTORY_SOURCE.PLAYLIST)}
                 >
                   {song.song_title}
+                  <span
+                    className="playlist-more"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedSong(song)
+                      setSelectedPlaylistId(null)
+                      setDeleteContext("favorites")
+                      setIsDeleteModalOpen(true)
+                    }}
+                  >
+                    ⋯
+                  </span>
                 </li>
               ))}
             </ul>
@@ -664,13 +802,24 @@ export default function HomePage() {
 
           {isHistoryOpen && (
             <ul className="playlist">
-              {historySongs.map((song) => (
+              {historySongs.map((song, idx) => (
                 <li
                   key={song.id}
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
-                  onClick={() => handlePlay(song, HISTORY_SOURCE.PLAYLIST)}
+                  onClick={() => handlePlayFromQueue(historySongs, idx, HISTORY_SOURCE.PLAYLIST)}
                 >
                   {song.song_title}
+                  <span
+                    className="playlist-more"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedSong(song)
+                      setDeleteContext("history")
+                      setIsDeleteModalOpen(true)
+                    }}
+                  >
+                    ⋯
+                  </span>
                 </li>
               ))}
             </ul>
@@ -682,10 +831,23 @@ export default function HomePage() {
                 onClick={() => handleToggleCustomPlaylist(playlist.id)}
               >
                 <div className="playlist-card-thumb">
-                  <img src={`/album_icon/${playlist.icon || PLAYLIST_ICONS[0]}`} alt={playlist.name} />
+                  <img src={`/album_icon/${playlist.playlist_icon || PLAYLIST_ICONS[0]}`} alt={playlist.playlist_name} />
                 </div>
                 <div className="playlist-card-info">
-                  <span className="playlist-card-name">{playlist.playlist_name}</span>
+                  <span
+                    className="playlist-card-name"
+                    onClick={(e) => {
+                      e.stopPropagation()
+
+                      setEditingPlaylist(playlist)
+                      setEditName(playlist.playlist_name)
+                      setEditIcon(playlist.playlist_icon || PLAYLIST_ICONS[0])
+                      setEditView("menu")
+                      setIsEditPlaylistModalOpen(true)
+                    }}
+                  >
+                    {playlist.playlist_name}
+                  </span>
                   <span className="playlist-card-meta">
                     播放清單 • {playlist.song_count} 首歌曲
                   </span>
@@ -700,13 +862,25 @@ export default function HomePage() {
                   {playlist.songs === null ? (
                     <li className="playlist-item empty-playlist-item">載入中...</li>
                   ) : playlist.songs.length > 0 ? (
-                    playlist.songs.map((song) => (
+                    playlist.songs.map((song, idx) => (
                       <li
                         key={song.id}
                         className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
-                        onClick={() => handlePlay(song, HISTORY_SOURCE.PLAYLIST)}
+                        onClick={() => handlePlayFromQueue(playlist.songs, idx, HISTORY_SOURCE.PLAYLIST)}
                       >
                         {song.song_title}
+                        <span
+                          className="playlist-more"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedSong(song)
+                            setSelectedPlaylistId(playlist.id)
+                            setDeleteContext("playlist")
+                            setIsDeleteModalOpen(true)
+                          }}
+                        >
+                          ⋯
+                        </span>
                       </li>
                     ))
                   ) : (
@@ -753,13 +927,40 @@ export default function HomePage() {
 
           {/* 右：用戶資訊 */}
           <div className="navbar-user">
-            <span className="navbar-greeting">一起嗨吧！{user.nickname}</span>
-            <div className="avatar">
+            <span className="navbar-greeting">
+              一起嗨吧！{user.nickname}
+            </span>
+
+            <div
+              className="avatar"
+              onClick={() => setIsUserMenuOpen((prev) => !prev)}
+            >
               {user.profilePicture
                 ? <img src={user.profilePicture} alt="avatar" />
                 : <span className="avatar-placeholder">🐰</span>
               }
             </div>
+
+            {isUserMenuOpen && (
+              <>
+                <div
+                  className="user-dropdown-overlay"
+                  onClick={() => setIsUserMenuOpen(false)}
+                />
+                <div className="user-dropdown">
+                  <div className="user-dropdown-name">
+                    {user.nickname}
+                  </div>
+
+                  <button
+                    className="logout-btn"
+                    onClick={handleLogout}
+                  >
+                    Log Out
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </nav>
 
@@ -770,11 +971,11 @@ export default function HomePage() {
             <section className="home-view">
               <h2 className="section-title">Recommendation</h2>
               <div className="recommendation-grid">
-                {recommendations.map((song) => (
+                {recommendations.map((song, idx) => (
                   <div
                     key={song.id}
                     className={`song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                    onClick={() => handlePlay(song, HISTORY_SOURCE.RECOMMENDATION)}
+                    onClick={() => handlePlayFromQueue(recommendations, idx, HISTORY_SOURCE.RECOMMENDATION)}
                   >
                     <p className="song-card-title">{song.song_title}</p>
                     <p className="song-card-artist">{song.artist_name}</p>
@@ -784,66 +985,110 @@ export default function HomePage() {
 
               {/* 重溫舊愛 */}
               <section className="sub-section">
-                <div className="sub-section-header">
-                  <h3 className="sub-section-title">重溫舊愛</h3>
-                  <button className="more-btn" onClick={handleNextRevisit}>
-                    more &gt;
-                  </button>
-                </div>
 
-                <div className="horizontal-card-list">
-                  {revisitVisible.map((song) => (
-                    <div
-                      key={song.id}
-                      className={`small-song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                      onClick={() => handlePlay(song, HISTORY_SOURCE.RECOMMENDATION)}
-                    >
-                      <p className="small-song-title">{song.song_title}</p>
-                      <p className="small-song-artist">{song.artist_name}</p>
+                {isRevisitUnlocked ? (
+                  <>
+                    <div className="sub-section-header">
+                      <h3 className="sub-section-title">重溫舊愛</h3>
+
+                      <button className="more-btn" onClick={handleNextRevisit}>
+                        more &gt;
+                      </button>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="horizontal-card-list">
+                      {revisitVisible.map((song) => (
+                        <div
+                          key={song.id}
+                          className={`small-song-card ${currentSong?.id === song.id ? "active" : ""}`}
+                          onClick={() => {
+                            const fullIdx = FAKE_REVISIT.findIndex((s) => s.id === song.id)
+                            handlePlayFromQueue(FAKE_REVISIT, fullIdx >= 0 ? fullIdx : 0, HISTORY_SOURCE.RECOMMENDATION)
+                          }}
+                        >
+                          <p className="small-song-title">{song.song_title}</p>
+                          <p className="small-song-artist">{song.artist_name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="revisit-locked">
+                    <p className="revisit-locked-text">
+                      UNLOCK AFTER 5 SONGS
+                    </p>
+
+                    <p className="revisit-locked-sub">
+                      {historySongs.length} / 5 songs listened
+                    </p>
+                  </div>
+                )}
+
               </section>
 
               {/* 你的朋友也在聽 */}
               <section className="sub-section">
-                <div className="sub-section-header">
-                  <h3 className="sub-section-title">你的朋友也在聽</h3>
-                  <button className="more-btn" onClick={handleNextFriend}>
-                    more &gt;
-                  </button>
-                </div>
 
-                <div className="horizontal-card-list">
-                  {friendVisible.slice(0, 3).map((item) => (
-                    <div
-                      key={item.id}
-                      className="friend-card"
-                      onClick={() => {
-                        handlePlay(
-                          {
-                            id: item.id,
-                            song_title: item.song_title,
-                            artist_name: item.artist_name,
-                          },
-                          HISTORY_SOURCE.FRIEND,
-                        )
-                      }}
-                    >
-                      <p className="friend-name">{item.friend_name}</p>
-                      <p className="friend-song">{item.song_title}</p>
-                      {item.artist_name && <p className="friend-artist">{item.artist_name}</p>}
+                {isFriendsUnlocked ? (
+                  <>
+                    <div className="sub-section-header">
+                      <h3 className="sub-section-title">你的朋友也在聽</h3>
+
+                      <button className="more-btn" onClick={handleNextFriend}>
+                        more &gt;
+                      </button>
                     </div>
-                  ))}
 
-                  <button
-                    className="friend-card search-friend-card"
-                    onClick={openFriendsModal}
-                    type="button"
-                  >
-                    <p className="friend-search-text">Search Your Friends!</p>
-                  </button>
-                </div>
+                    <div className="horizontal-card-list">       
+                      {friendVisible.slice(0, 3).map((item) => (
+                        <div
+                          key={item.id}
+                          className="friend-card"
+                          onClick={() => {
+                            const friendSongs = FAKE_FRIENDS.map((f) => ({
+                              id: f.id,
+                              song_title: f.song_title,
+                              artist_name: f.artist_name,
+                            }))
+                            const fullIdx = FAKE_FRIENDS.findIndex((f) => f.id === item.id)
+                            handlePlayFromQueue(friendSongs, fullIdx >= 0 ? fullIdx : 0, HISTORY_SOURCE.FRIEND)
+                          }}
+                        >
+                          <p className="friend-name">{item.friend_name}</p>
+                          <p className="friend-song">{item.song_title}</p>
+
+                          {item.artist_name && (
+                            <p className="friend-artist">
+                              {item.artist_name}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+
+                      <button
+                        className="friend-card search-friend-card"
+                        onClick={openFriendsModal}
+                        type="button"
+                      >
+                        <p className="friend-search-text">
+                          Search Your Friends!
+                        </p>
+                      </button>
+                                
+                    </div>
+                  </>
+                ) : (
+                  <div className="revisit-locked">
+                    <p className="revisit-locked-text">
+                      UNLOCK AFTER 10 SONGS
+                    </p>
+
+                    <p className="revisit-locked-sub">
+                      {historySongs.length} / 10 songs listened
+                    </p>
+                  </div>
+                )}
+
               </section>
             </section>
           )}
@@ -878,11 +1123,11 @@ export default function HomePage() {
 
               {searchResults.length > 0 && (
                 <div className="search-results">
-                  {searchResults.map((song) => (
+                  {searchResults.map((song, idx) => (
                     <div
                       key={song.id}
                       className={`song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                      onClick={() => handlePlay(song, HISTORY_SOURCE.SEARCH)}
+                      onClick={() => handlePlayFromQueue(searchResults, idx, HISTORY_SOURCE.SEARCH)}
                     >
                       <p className="song-card-title">{song.song_title}</p>
                       <p className="song-card-artist">{song.artist_name}</p>
@@ -949,6 +1194,14 @@ export default function HomePage() {
                 <img src="/add.svg" alt="add" className="add-icon" />
               </button>
 
+              <button
+                className={`action-btn-new ${isLooping ? "active" : ""}`}
+                title="單曲循環"
+                onClick={toggleLoop}
+              >
+                <img src="/repeat.svg" alt="repeat" className="repeat-icon" />
+              </button>
+
             </div>
 
             {/* 進度條 */}
@@ -993,13 +1246,21 @@ export default function HomePage() {
             </div>
 
             {/* 播放控制 */}
-            <button className="play-btn" onClick={togglePlay} title={isPlaying ? "暫停" : "播放"}>
-              <img
-                src={isPlaying ? "/pause.svg" : "/play.svg"}
-                alt={isPlaying ? "pause" : "play"}
-                className="play-icon"
-              />
-            </button>
+            <div className="player-controls-row">
+              <button className="skip-btn" onClick={handlePrev} title="上一首">
+                <img src="/prev.svg" alt="prev" className="skip-icon" />
+              </button>
+              <button className="play-btn" onClick={togglePlay} title={isPlaying ? "暫停" : "播放"}>
+                <img
+                  src={isPlaying ? "/pause.svg" : "/play.svg"}
+                  alt={isPlaying ? "pause" : "play"}
+                  className="play-icon"
+                />
+              </button>
+              <button className="skip-btn" onClick={handleNext} title="下一首">
+                <img src="/next.svg" alt="next" className="skip-icon" />
+              </button>
+            </div>
 
             {/* YouTube 播放器 */}
             <div className="youtube-player-wrap">
@@ -1016,6 +1277,18 @@ export default function HomePage() {
                     playerRef.current = e.target
                   }}
                   onEnd={() => {
+                    if (isLoopingRef.current) {
+                      playerRef.current?.seekTo(0)
+                      playerRef.current?.playVideo()
+                      return
+                    }
+                    const q = queueRef.current
+                    if (q && q.songs.length > 1) {
+                      const nextIndex = (q.index + 1) % q.songs.length
+                      queueRef.current = { songs: q.songs, index: nextIndex }
+                      handlePlay(q.songs[nextIndex], HISTORY_SOURCE.PLAYLIST)
+                      return
+                    }
                     flushCurrentHistory()
                     setIsPlaying(false)
                   }}
@@ -1137,7 +1410,7 @@ export default function HomePage() {
                       onClick={() => handleAddSongToPlaylist(playlist.id)}
                     >
                       <div className="playlist-modal-item-icon">
-                        <img src={`/album_icon/${playlist.icon || PLAYLIST_ICONS[0]}`} alt={playlist.name} />
+                        <img src={`/album_icon/${playlist.playlist_icon || PLAYLIST_ICONS[0]}`} alt={playlist.playlist_name} />
                       </div>
 
                       <div className="playlist-modal-item-info">
@@ -1236,25 +1509,187 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      {isDeleteModalOpen && (
+        <div className="delete-modal-overlay">
+          <div className="delete-modal">
+
+            <div className="delete-modal-header">
+              <h2>{selectedSong?.song_title}</h2>
+              <button onClick={() => setIsDeleteModalOpen(false)}>×</button>
+            </div>
+
+            <button
+              className="delete-btn"
+              onClick={() => {
+                if (deleteContext === "history") handleDeleteFromHistory()
+                else if (deleteContext === "playlist") handleDeleteFromCustomPlaylist()
+                else handleDeleteFromFavorites()
+                setIsDeleteModalOpen(false)
+              }}
+            >
+              {deleteContext === "history" ? "Delete From History" : deleteContext === "favorites" ? "Delete From Favorites" : "Delete From Playlist"}
+            </button>
+
+          </div>
+        </div>
+      )}    
+      {isEditPlaylistModalOpen && (
+        <div className="delete-modal-overlay">
+          <div className="delete-modal">
+
+            {/* Header */}
+            <div className="delete-modal-header">
+
+              {editView !== "menu" && (
+                <button
+                  className="back-btn"
+                  onClick={() => setEditView("menu")}
+                >
+                  ←
+                </button>
+              )}
+
+              <h2>
+                {editView === "menu" && editingPlaylist?.playlist_name}
+                {editView === "name" && "Change Playlist Name"}
+                {editView === "icon" && "Change Playlist Icon"}
+              </h2>
+
+              <button onClick={() => setIsEditPlaylistModalOpen(false)}>×</button>
+
+            </div>
+
+            {/* 主選單 */}
+            {editView === "menu" && (
+              <>
+                <button
+                  className="delete-btn"
+                  onClick={() => setEditView("name")}
+                >
+                  Change Playlist Name
+                </button>
+
+                <button
+                  className="delete-btn"
+                  onClick={() => setEditView("icon")}
+                >
+                  Change Playlist Icon
+                </button>
+
+                <button
+                  className="delete-btn"
+                  onClick={async () => {
+                    await deletePlaylist(editingPlaylist.id)
+
+                    setCustomPlaylists(prev =>
+                      prev.filter(p => p.id !== editingPlaylist.id)
+                    )
+
+                    setIsEditPlaylistModalOpen(false)
+                  }}
+                >
+                  Delete Playlist
+                </button>
+              </>
+            )}
+
+            {/* 改名稱 */}
+            {editView === "name" && (
+              <>
+                <div>
+                  <input
+                    value={editName}
+                    onChange={(e) => {
+                      setEditName(e.target.value)
+                      setNameError("")   // ⭐打字時清掉錯誤
+                    }}
+                    placeholder="Please fill out"
+                  />
+
+                  {nameError && (
+                    <div style={{
+                      background: "#f7b6b6",
+                      color: "#b00020",
+                      padding: "6px 10px",
+                      borderRadius: "10px",
+                      marginTop: "6px",
+                      display: "inline-block"
+                    }}>
+                      {nameError}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  className="delete-btn"
+                  onClick={async () => {
+                    if (!editName.trim()) {
+                      setNameError("Please fill out")
+                      return
+                    }
+
+                    await updatePlaylist(editingPlaylist.id, editName)
+
+                    setCustomPlaylists(prev =>
+                      prev.map(p =>
+                        p.id === editingPlaylist.id
+                          ? { ...p, playlist_name: editName }
+                          : p
+                      )
+                    )
+
+                    setIsEditPlaylistModalOpen(false)
+                  }}
+                >
+                  Change
+                </button>
+              </>
+            )}
+
+            {/* 改 icon */}
+            {editView === "icon" && (
+              <>
+                <div className="icon-grid">
+                  {PLAYLIST_ICONS.map(icon => (
+                    <img
+                      key={icon}
+                      src={`/album_icon/${icon}`}
+                      onClick={() => setEditIcon(icon)}
+                      style={{
+                        width: 90,
+                        height: 90,            // ⭐加這行（固定高度）
+                        objectFit: "contain",  // ⭐加這行（不變形）
+                        border: editIcon === icon ? "2px solid blue" : "none",
+                        borderRadius: 8,
+                        cursor: "pointer"
+                      }}
+                    />
+                  ))}
+                </div>
+
+                <button
+                  className="delete-btn"
+                  onClick={() => {
+                    setCustomPlaylists(prev =>
+                      prev.map(p =>
+                        p.id === editingPlaylist.id
+                          ? { ...p, playlist_icon: editIcon }
+                          : p
+                      )
+                    )
+
+                    setIsEditPlaylistModalOpen(false)
+                  }}
+                >
+                  Change
+                </button>
+              </>
+            )}
+
+          </div>
+        </div>
+      )}  
     </div>
   )
 }
-
-
-/*
-            <div className="player-actions">
-              <button className="action-btn-new" title="喜歡">
-                <img src="/good.svg" alt="like" className="good-icon" />
-              </button>
-              <button className="action-btn-new" title="不喜歡">
-                <img src="/bad.svg" alt="dislike" className="bad-icon" />
-              </button>
-              <button className="action-btn-new" title="收藏至已收藏的歌曲">
-                <img src="/keep.svg" alt="keep" className="keep-icon" />
-              </button>
-              <button className="action-btn-new" title="加入播放清單">
-                <img src="/add.svg" alt="add" className="add-icon" />
-              </button>
-            </div>
-
-            */
