@@ -148,6 +148,7 @@ export default function HomePage() {
   const [youtubeVideoId, setYoutubeVideoId] = useState(null)
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
   const playerRef = useRef(null)
+  const lastTimeRef = useRef(0)
 
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -157,7 +158,9 @@ export default function HomePage() {
     if (isPlaying) {
       progressIntervalRef.current = setInterval(() => {
         if (playerRef.current) {
-          setCurrentTime(playerRef.current.getCurrentTime() || 0)
+          const t = playerRef.current.getCurrentTime() || 0
+          lastTimeRef.current = t
+          setCurrentTime(t)
           setDuration(playerRef.current.getDuration() || 0)
         }
       }, 500)
@@ -370,12 +373,7 @@ export default function HomePage() {
 
     if (!snapshot.song || !snapshot.source) return
 
-    let seconds = 0
-    try {
-      seconds = playerRef.current?.getCurrentTime?.() ?? 0
-    } catch {
-      seconds = 0
-    }
+    const seconds = lastTimeRef.current
     // 真的沒播到就不更新（紀錄保持 watch_seconds=0）
     if (!seconds || seconds < 1) return
 
@@ -458,6 +456,7 @@ export default function HomePage() {
 
     clearInterval(progressIntervalRef.current)
     playerRef.current = null
+    lastTimeRef.current = 0
     setYoutubeVideoId(null)
     setCurrentTime(0)
     setDuration(0)
