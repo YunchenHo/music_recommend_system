@@ -634,6 +634,40 @@ button:focus, button:focus-visible { outline: none; box-shadow: none; }
   border-color: var(--pink-border);
 }
 */
+/* 上一首 / 下一首按鈕列 */
+.player-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 6px;
+}
+
+.skip-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--pink-border);
+  background-color: var(--pink-light);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease, transform 0.15s ease;
+}
+
+.skip-btn:hover {
+  background-color: var(--pink-hover);
+  transform: scale(1.1);
+}
+
+.skip-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  object-fit: contain;
+}
+
 /* 播放 / 暫停按鈕 */
 .play-btn {
   width: 54px;
@@ -647,7 +681,6 @@ button:focus, button:focus-visible { outline: none; box-shadow: none; }
   align-items: center;
   justify-content: center;
   transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
-  margin-top: 6px;
 }
 
 .play-btn:hover {

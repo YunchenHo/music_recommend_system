@@ -107,6 +107,8 @@ export default function HomePage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [selectedSong, setSelectedSong] = useState(null)
   const [selectedPlaylistId, setSelectedPlaylistId] = useState(null)
+  // 'favorites' | 'playlist' | 'history'
+  const [deleteContext, setDeleteContext] = useState("favorites")
   // 目前顯示的頁面：'home' | 'search'
   const [view, setView] = useState("home")
 
@@ -332,15 +334,18 @@ export default function HomePage() {
       )
       .catch(console.error)
 
-    // 載入歷史紀錄（僅取最近 20 筆）；後端已直接回傳 song_title/artist_name 等
+    // 載入歷史紀錄（取最近 20 筆，去重後過濾使用者手動隱藏的歌）
+    const hiddenHistory = new Set(
+      JSON.parse(localStorage.getItem("hiddenHistory") || "[]")
+    )
     getHistory({ limit: 20 })
       .then((resp) => {
         const items = resp?.data ?? []
-        // 後端已依 played_at desc 排序，但同首歌可能多筆 → 在前端去重保留最新
         const seen = new Set()
         const deduped = []
         for (const it of items) {
           if (seen.has(it.song_id)) continue
+          if (hiddenHistory.has(it.song_id)) continue
           seen.add(it.song_id)
           deduped.push({
             id: it.song_id,
@@ -498,8 +503,25 @@ export default function HomePage() {
 
   // 從清單播放：設定佇列並播放指定索引的歌
   const handlePlayFromQueue = (songs, index, source) => {
-    queueRef.current = { songs, index }
+    queueRef.current = { songs, index, source }
     handlePlay(songs[index], source)
+  }
+
+  // 上一首 / 下一首
+  const handlePrev = () => {
+    const q = queueRef.current
+    if (!q || q.songs.length < 2) return
+    const prevIndex = (q.index - 1 + q.songs.length) % q.songs.length
+    queueRef.current = { ...q, index: prevIndex }
+    handlePlay(q.songs[prevIndex], q.source || HISTORY_SOURCE.PLAYLIST)
+  }
+
+  const handleNext = () => {
+    const q = queueRef.current
+    if (!q || q.songs.length < 2) return
+    const nextIndex = (q.index + 1) % q.songs.length
+    queueRef.current = { ...q, index: nextIndex }
+    handlePlay(q.songs[nextIndex], q.source || HISTORY_SOURCE.PLAYLIST)
   }
 
   // 切換播放 / 暫停
@@ -636,7 +658,16 @@ export default function HomePage() {
       }
     }
   }
-    // ⭐ 刪除收藏
+    // 從歷史紀錄刪除（前端隱藏，後端資料保留供推薦系統使用）
+  const handleDeleteFromHistory = () => {
+    const hidden = JSON.parse(localStorage.getItem("hiddenHistory") || "[]")
+    if (!hidden.includes(selectedSong.id)) {
+      localStorage.setItem("hiddenHistory", JSON.stringify([...hidden, selectedSong.id]))
+    }
+    setHistorySongs((prev) => prev.filter((s) => s.id !== selectedSong.id))
+  }
+
+  // ⭐ 刪除收藏
   const handleDeleteFromFavorites = async () => {
     try {
       await removeFavorite(selectedSong.id)
@@ -732,17 +763,16 @@ export default function HomePage() {
                 <li
                   key={song.id}
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
+                  onClick={() => handlePlayFromQueue(favorites, idx, HISTORY_SOURCE.PLAYLIST)}
                 >
-                  <span onClick={() => handlePlay(song)}>
-                    {song.song_title}
-                  </span>
-
+                  {song.song_title}
                   <span
                     className="playlist-more"
                     onClick={(e) => {
                       e.stopPropagation()
                       setSelectedSong(song)
-                      setSelectedPlaylistId(null) // ⭐重要（custom playlist用）
+                      setSelectedPlaylistId(null)
+                      setDeleteContext("favorites")
                       setIsDeleteModalOpen(true)
                     }}
                   >
@@ -780,6 +810,17 @@ export default function HomePage() {
                   onClick={() => handlePlayFromQueue(historySongs, idx, HISTORY_SOURCE.PLAYLIST)}
                 >
                   {song.song_title}
+                  <span
+                    className="playlist-more"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedSong(song)
+                      setDeleteContext("history")
+                      setIsDeleteModalOpen(true)
+                    }}
+                  >
+                    ⋯
+                  </span>
                 </li>
               ))}
             </ul>
@@ -826,17 +867,16 @@ export default function HomePage() {
                       <li
                         key={song.id}
                         className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
+                        onClick={() => handlePlayFromQueue(playlist.songs, idx, HISTORY_SOURCE.PLAYLIST)}
                       >
-                        <span onClick={() => handlePlay(song)}>
-                          {song.song_title}
-                        </span>
-
+                        {song.song_title}
                         <span
                           className="playlist-more"
                           onClick={(e) => {
                             e.stopPropagation()
                             setSelectedSong(song)
                             setSelectedPlaylistId(playlist.id)
+                            setDeleteContext("playlist")
                             setIsDeleteModalOpen(true)
                           }}
                         >
@@ -932,11 +972,11 @@ export default function HomePage() {
             <section className="home-view">
               <h2 className="section-title">Recommendation</h2>
               <div className="recommendation-grid">
-                {recommendations.map((song) => (
+                {recommendations.map((song, idx) => (
                   <div
                     key={song.id}
                     className={`song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                    onClick={() => { queueRef.current = null; handlePlay(song, HISTORY_SOURCE.RECOMMENDATION) }}
+                    onClick={() => handlePlayFromQueue(recommendations, idx, HISTORY_SOURCE.RECOMMENDATION)}
                   >
                     <p className="song-card-title">{song.song_title}</p>
                     <p className="song-card-artist">{song.artist_name}</p>
@@ -963,8 +1003,8 @@ export default function HomePage() {
                           key={song.id}
                           className={`small-song-card ${currentSong?.id === song.id ? "active" : ""}`}
                           onClick={() => {
-                            queueRef.current = null
-                            handlePlay(song, HISTORY_SOURCE.RECOMMENDATION)
+                            const fullIdx = FAKE_REVISIT.findIndex((s) => s.id === song.id)
+                            handlePlayFromQueue(FAKE_REVISIT, fullIdx >= 0 ? fullIdx : 0, HISTORY_SOURCE.RECOMMENDATION)
                           }}
                         >
                           <p className="small-song-title">{song.song_title}</p>
@@ -1006,16 +1046,13 @@ export default function HomePage() {
                           key={item.id}
                           className="friend-card"
                           onClick={() => {
-                            queueRef.current = null
-
-                            handlePlay(
-                              {
-                                id: item.id,
-                                song_title: item.song_title,
-                                artist_name: item.artist_name,
-                              },
-                              HISTORY_SOURCE.FRIEND,
-                            )
+                            const friendSongs = FAKE_FRIENDS.map((f) => ({
+                              id: f.id,
+                              song_title: f.song_title,
+                              artist_name: f.artist_name,
+                            }))
+                            const fullIdx = FAKE_FRIENDS.findIndex((f) => f.id === item.id)
+                            handlePlayFromQueue(friendSongs, fullIdx >= 0 ? fullIdx : 0, HISTORY_SOURCE.FRIEND)
                           }}
                         >
                           <p className="friend-name">{item.friend_name}</p>
@@ -1087,11 +1124,11 @@ export default function HomePage() {
 
               {searchResults.length > 0 && (
                 <div className="search-results">
-                  {searchResults.map((song) => (
+                  {searchResults.map((song, idx) => (
                     <div
                       key={song.id}
                       className={`song-card ${currentSong?.id === song.id ? "active" : ""}`}
-                      onClick={() => { queueRef.current = null; handlePlay(song, HISTORY_SOURCE.SEARCH) }}
+                      onClick={() => handlePlayFromQueue(searchResults, idx, HISTORY_SOURCE.SEARCH)}
                     >
                       <p className="song-card-title">{song.song_title}</p>
                       <p className="song-card-artist">{song.artist_name}</p>
@@ -1210,13 +1247,21 @@ export default function HomePage() {
             </div>
 
             {/* 播放控制 */}
-            <button className="play-btn" onClick={togglePlay} title={isPlaying ? "暫停" : "播放"}>
-              <img
-                src={isPlaying ? "/pause.svg" : "/play.svg"}
-                alt={isPlaying ? "pause" : "play"}
-                className="play-icon"
-              />
-            </button>
+            <div className="player-controls-row">
+              <button className="skip-btn" onClick={handlePrev} title="上一首">
+                <img src="/prev.svg" alt="prev" className="skip-icon" />
+              </button>
+              <button className="play-btn" onClick={togglePlay} title={isPlaying ? "暫停" : "播放"}>
+                <img
+                  src={isPlaying ? "/pause.svg" : "/play.svg"}
+                  alt={isPlaying ? "pause" : "play"}
+                  className="play-icon"
+                />
+              </button>
+              <button className="skip-btn" onClick={handleNext} title="下一首">
+                <img src="/next.svg" alt="next" className="skip-icon" />
+              </button>
+            </div>
 
             {/* YouTube 播放器 */}
             <div className="youtube-player-wrap">
@@ -1478,15 +1523,13 @@ export default function HomePage() {
             <button
               className="delete-btn"
               onClick={() => {
-                if (selectedPlaylistId) {
-                  handleDeleteFromCustomPlaylist()
-                } else {
-                  handleDeleteFromFavorites()
-                }
+                if (deleteContext === "history") handleDeleteFromHistory()
+                else if (deleteContext === "playlist") handleDeleteFromCustomPlaylist()
+                else handleDeleteFromFavorites()
                 setIsDeleteModalOpen(false)
               }}
             >
-              Delete From Playlist
+              {deleteContext === "history" ? "Delete From History" : deleteContext === "favorites" ? "Delete From Favorites" : "Delete From Playlist"}
             </button>
 
           </div>
@@ -1651,22 +1694,3 @@ export default function HomePage() {
     </div>
   )
 }
-
-
-/*
-            <div className="player-actions">
-              <button className="action-btn-new" title="喜歡">
-                <img src="/good.svg" alt="like" className="good-icon" />
-              </button>
-              <button className="action-btn-new" title="不喜歡">
-                <img src="/bad.svg" alt="dislike" className="bad-icon" />
-              </button>
-              <button className="action-btn-new" title="收藏至已收藏的歌曲">
-                <img src="/keep.svg" alt="keep" className="keep-icon" />
-              </button>
-              <button className="action-btn-new" title="加入播放清單">
-                <img src="/add.svg" alt="add" className="add-icon" />
-              </button>
-            </div>
-
-            */
