@@ -1,0 +1,226 @@
+### ===========================================
+### Music Recommend System — MF Fold-in 推薦測試
+### ===========================================
+### 使用方式：VS Code 安裝 REST Client 套件
+### 按每個請求上方的 "Send Request" 即可執行
+###
+### 測試流程：
+### 1. dev-login 取得 session
+### 2. 送出 onboarding（view 會檢查是否有 onboarding 種子）
+### 3. 塞 15+ 筆 History（watch_seconds >= 10）觸發 MF 門檻
+### 4. 加幾個 like/dislike 提供明確信號
+### 5. 呼叫推薦 API → 預期 algorithm = "MF-FoldIn"
+### ===========================================
+
+### 變數設定（從 dev-login 回傳的 Set-Cookie 取得後填入）
+@host = http://localhost:8000
+@sessionid = 9lt99cxraf9s33h7zrz1iikf83mr29fv
+@csrftoken = JBLv1sBXgZSPKXMw2NMjJKspSufa4H6H
+
+### -------------------------------------------
+### 1. 模擬登入
+### 執行後從 Response Headers 的 Set-Cookie 取得 sessionid 和 csrftoken
+### -------------------------------------------
+POST {{host}}/api/auth/dev-login
+Content-Type: application/json
+
+{
+  "username": "mf_testuser"
+}
+
+### -------------------------------------------
+### 2. 確認登入成功
+### -------------------------------------------
+GET {{host}}/api/auth/me
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 3. 送出 Onboarding（RecommendationsView 需要有種子才不會回空）
+### 使用 DB 中存在的 song_id
+### -------------------------------------------
+POST {{host}}/api/onboarding/submit
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{
+  "artist_ids": [213320, 16523, 218983],
+  "song_ids": [601145, 869707, 2131014]
+}
+
+### -------------------------------------------
+### 4. 塞 History（共 16 筆，每筆 watch_seconds >= 10）
+### 這些是 DB 中存在的 song_id
+### -------------------------------------------
+
+### History 1
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 601145, "watch_seconds": 120, "source": "SEARCH"}
+
+### History 2
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 869707, "watch_seconds": 90, "source": "SEARCH"}
+
+### History 3
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 2131014, "watch_seconds": 60, "source": "SEARCH"}
+
+### History 4
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 95617, "watch_seconds": 45, "source": "RECOMMENDATION"}
+
+### History 5
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 145981, "watch_seconds": 200, "source": "RECOMMENDATION"}
+
+### History 6
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 182327, "watch_seconds": 30, "source": "SEARCH"}
+
+### History 7
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 312371, "watch_seconds": 150, "source": "PLAYLIST"}
+
+### History 8
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 418400, "watch_seconds": 80, "source": "SEARCH"}
+
+### History 9
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 658793, "watch_seconds": 55, "source": "RECOMMENDATION"}
+
+### History 10
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 706539, "watch_seconds": 110, "source": "SEARCH"}
+
+### History 11
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 707330, "watch_seconds": 95, "source": "PLAYLIST"}
+
+### History 12
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 727337, "watch_seconds": 40, "source": "SEARCH"}
+
+### History 13
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 756661, "watch_seconds": 180, "source": "RECOMMENDATION"}
+
+### History 14
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 1393169, "watch_seconds": 60, "source": "SEARCH"}
+
+### History 15
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 1534221, "watch_seconds": 75, "source": "PLAYLIST"}
+
+### History 16
+POST {{host}}/api/auth/history
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 1874831, "watch_seconds": 130, "source": "SEARCH"}
+
+### -------------------------------------------
+### 5. 加幾個 Like / Dislike（提供明確正負信號）
+### -------------------------------------------
+
+### Like 歌曲 601145
+POST {{host}}/api/auth/like
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 601145, "is_like": true}
+
+### Like 歌曲 869707
+POST {{host}}/api/auth/like
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 869707, "is_like": true}
+
+### Dislike 歌曲 727337
+POST {{host}}/api/auth/like
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+X-CSRFToken: {{csrftoken}}
+Content-Type: application/json
+
+{"song_id": 727337, "is_like": false}
+
+### -------------------------------------------
+### 6. 取得推薦（預期觸發 MF Fold-in）
+### 預期 response 包含：
+###   "algorithm": "MF-FoldIn"
+###   "data": [9 首推薦歌曲]
+### -------------------------------------------
+GET {{host}}/api/songs/recommendations
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}
+
+### -------------------------------------------
+### 7. 再呼叫一次（不應重算，因為新互動 < 30）
+### 預期直接回傳已存的 MF batch
+### -------------------------------------------
+GET {{host}}/api/songs/recommendations
+Cookie: sessionid={{sessionid}}; csrftoken={{csrftoken}}

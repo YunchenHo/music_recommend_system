@@ -23,6 +23,8 @@ _tmp_dataset/
 !recommender/artifacts/itemknn_artifacts.npz
 !recommender/artifacts/artist_id_map_small.csv
 !recommender/artifacts/song_for_db_small.csv
+!recommender/artifacts/mf_song_embeddings.npy
+!recommender/artifacts/mf_model.h5
 
 # Jupyter
 .ipynb_checkpoints/

@@ -115,7 +115,7 @@ def main() -> int:
             tf.keras.mixed_precision.set_global_policy("mixed_float16")
             print("[MF] mixed precision: enabled", flush=True)
 
-    from src.models.mf import prepare_mf_data, train_mf_model, evaluate_classification
+    from src.models.mf import prepare_mf_data, train_mf_model, evaluate_classification, export_mf_artifacts
 
     print(f"[MF] loading train from {args.train_path} ...", flush=True)
     t0 = time.time()
@@ -207,6 +207,9 @@ def main() -> int:
     with open(args.report_out, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
     print("Saved classification report:", args.report_out)
+
+    # Export fold-in artifacts
+    export_mf_artifacts(model, data, paths.artifacts)
 
     return 0
 

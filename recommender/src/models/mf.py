@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 import time
 
 import numpy as np
@@ -23,6 +24,8 @@ class MFData:
     y_train_full: np.ndarray
     num_users: int
     num_items: int
+    useridx: dict | None = None
+    itemidx: dict | None = None
 
 
 def prepare_mf_data(
@@ -82,6 +85,8 @@ def prepare_mf_data(
         y_train_full=y_train_full,
         num_users=num_users,
         num_items=num_items,
+        useridx=useridx,
+        itemidx=itemidx,
     )
 
 
@@ -397,3 +402,62 @@ def evaluate_mf_for_comparison(
         )
 
     return pd.DataFrame(results)
+
+
+# ---------------------------------------------------------------------------
+# Artifact export for fold-in serving
+# ---------------------------------------------------------------------------
+
+
+def export_mf_artifacts(model, mf_data: MFData, output_dir: str | Path) -> dict[str, Path]:
+    """
+    從訓練好的 MF 模型中匯出 fold-in 所需的 artifacts。
+
+    輸出：
+      - mf_song_embeddings.npy  (num_items × embedding_dim)
+      - mf_song_bias.npy        (num_items,)  — 若模型無 bias layer 則全 0
+      - mf_item_mapping.json    {song_id: embedding_index}
+
+    回傳各檔案的 Path。
+    """
+    import json
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # 提取 song embedding
+    item_layer = model.get_layer("song_embedding")
+    song_embeddings = item_layer.get_weights()[0].astype("float32")
+
+    # 提取 song bias（improved model 才有）
+    try:
+        bias_layer = model.get_layer("song_bias")
+        song_bias = bias_layer.get_weights()[0].flatten().astype("float32")
+    except ValueError:
+        song_bias = np.zeros(song_embeddings.shape[0], dtype="float32")
+
+    # item mapping: song_id → embedding index
+    if mf_data.itemidx is None:
+        raise ValueError("MFData.itemidx is None; cannot export item mapping.")
+    item_mapping = {int(k): int(v) for k, v in mf_data.itemidx.items()}
+
+    # 儲存
+    emb_path = output_dir / "mf_song_embeddings.npy"
+    bias_path = output_dir / "mf_song_bias.npy"
+    mapping_path = output_dir / "mf_item_mapping.json"
+
+    np.save(emb_path, song_embeddings)
+    np.save(bias_path, song_bias)
+    with open(mapping_path, "w", encoding="utf-8") as f:
+        json.dump(item_mapping, f)
+
+    print(f"[MF] Exported artifacts to {output_dir}")
+    print(f"  song_embeddings: {song_embeddings.shape}")
+    print(f"  song_bias: {song_bias.shape}")
+    print(f"  item_mapping: {len(item_mapping)} items")
+
+    return {
+        "song_embeddings": emb_path,
+        "song_bias": bias_path,
+        "item_mapping": mapping_path,
+    }
