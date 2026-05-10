@@ -764,7 +764,10 @@ export default function HomePage() {
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
                   onClick={() => handlePlayFromQueue(favorites, idx, HISTORY_SOURCE.PLAYLIST)}
                 >
-                  {song.song_title}
+                  <span className="playlist-song-title">
+                    {song.song_title}
+                  </span>
+
                   <span
                     className="playlist-more"
                     onClick={(e) => {
@@ -808,7 +811,10 @@ export default function HomePage() {
                   className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
                   onClick={() => handlePlayFromQueue(historySongs, idx, HISTORY_SOURCE.PLAYLIST)}
                 >
-                  {song.song_title}
+                  <span className="playlist-song-title">
+                    {song.song_title}
+                  </span>
+
                   <span
                     className="playlist-more"
                     onClick={(e) => {
@@ -868,7 +874,10 @@ export default function HomePage() {
                         className={`playlist-item ${currentSong?.id === song.id ? "active" : ""}`}
                         onClick={() => handlePlayFromQueue(playlist.songs, idx, HISTORY_SOURCE.PLAYLIST)}
                       >
-                        {song.song_title}
+                        <span className="playlist-song-title">
+                          {song.song_title}
+                        </span>
+
                         <span
                           className="playlist-more"
                           onClick={(e) => {
