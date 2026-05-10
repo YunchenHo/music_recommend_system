@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 
 from django.conf import settings
-from django.contrib.auth import login
+from django.contrib.auth import login, logout
 from django.db import connection
 from django.db.models import Count
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
@@ -20,6 +20,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests
 
 from . import onboarding_itemknn_store
+from .affinity_score import AFFINITY_FILTER_THRESHOLD
 from .models import (
     User,
     Artist,
@@ -32,6 +33,7 @@ from .models import (
     RecommendationItem,
     History,
     UserSongLike,
+    UserSongAffinity,
 )
 
 logger = logging.getLogger(__name__)
@@ -88,6 +90,19 @@ class GoogleLoginView(APIView):
                 "message": "Google authentication failed. Please try again.",
                 "code": "INVALID_GOOGLE_TOKEN"
             }, status=status.HTTP_401_UNAUTHORIZED)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class LogoutView(APIView):
+    """POST /api/auth/logout — 登出當前使用者，清除 session"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        logout(request)
+        return Response({
+            "status": "success",
+            "message": "Logout successful.",
+        }, status=status.HTTP_200_OK)
+
 
 class RegisterProfileView(APIView):
     permission_classes = [IsAuthenticated]
@@ -348,24 +363,44 @@ class RecommendationsView(APIView):
                 "message": "Recommendations temporarily unavailable.",
             }, status=status.HTTP_200_OK)
 
-        # 4. 從批次中讀取前 9 首，帶出歌曲資訊
-        items = (
+        # 4. 載入批次內所有候選（之後要重排與過濾，不能只取前 9）
+        items = list(
             RecommendationItem.objects
             .filter(batch=batch)
             .select_related('song')
-            .order_by('rank')[:9]
         )
+
+        # 5. 取使用者對候選歌的 affinity（沒紀錄者預設 0）
+        song_ids = [item.song_id for item in items]
+        affinity_map = dict(
+            UserSongAffinity.objects
+            .filter(user=user, song_id__in=song_ids)
+            .values_list('song_id', 'score')
+        )
+
+        # 6. 套重排公式 final = itemknn_score * (1 + affinity)，並過濾 affinity < threshold
+        reranked: list[tuple[float, RecommendationItem]] = []
+        for item in items:
+            affinity = affinity_map.get(item.song_id, 0.0)
+            if affinity < AFFINITY_FILTER_THRESHOLD:
+                continue
+            final_score = item.score * (1.0 + affinity)
+            reranked.append((final_score, item))
+
+        # 7. 依 final_score 重排，取前 9
+        reranked.sort(key=lambda pair: pair[0], reverse=True)
+        top = reranked[:9]
 
         data = [
             {
-                "rank": item.rank,
+                "rank": new_rank,
                 "id": item.song.id,
                 "song_title": item.song.song_title,
                 "artist_name": item.song.artist_name,
                 "song_image": item.song.song_image,
                 "language": item.song.language,
             }
-            for item in items
+            for new_rank, (_, item) in enumerate(top, start=1)
         ]
 
         return Response({
