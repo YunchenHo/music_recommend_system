@@ -212,3 +212,33 @@ class UserSongLike(models.Model):
     def __str__(self):
         status = "likes" if self.is_liked else "dislikes"
         return f"{self.user.username} {status} {self.song.song_title}"
+
+
+class UserSongAffinity(models.Model):
+    """使用者對歌曲的偏好分數（批次計算結果）。"""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='affinities')
+    song = models.ForeignKey(Song, on_delete=models.CASCADE, related_name='user_affinities')
+
+    # 原始訊號聚合值（保留以利調權重、debug、未來餵 MF）
+    total_watch_seconds = models.IntegerField(default=0)  # 排除 skip 行的累計秒數
+    skip_count = models.IntegerField(default=0)           # 單次 watch_seconds < SKIP_THRESHOLD_SECONDS 的次數
+    is_favorited = models.BooleanField(default=False)
+    like_state = models.SmallIntegerField(default=0)      # 1 = like, -1 = dislike, 0 = 無紀錄
+
+    # 最終分數，clip 到 [-1.0, 1.0]
+    score = models.FloatField(default=0.0)
+
+    computed_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'song'], name='unique_user_song_affinity'),
+        ]
+        indexes = [
+            models.Index(fields=['user', '-score']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.song.song_title} ({self.score:.2f})"
