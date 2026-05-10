@@ -150,6 +150,7 @@ ITEMKNN_ARTIFACT_PATH = os.environ.get(
     "ITEMKNN_ARTIFACT_PATH",
     str(RECOMMENDER_ARTIFACTS_DIR / "itemknn_artifacts.npz"),
 )
+MF_ARTIFACT_DIR = Path(os.environ.get('MF_ARTIFACT_DIR', str(RECOMMENDER_ARTIFACTS_DIR)))
 
 # Session Settings
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'  

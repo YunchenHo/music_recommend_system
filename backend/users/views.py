@@ -20,6 +20,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests
 
 from . import onboarding_itemknn_store
+from . import mf_foldin_store
 from .models import (
     User,
     Artist,
@@ -309,7 +310,7 @@ ARCHIVE_PLAYLIST_NAME = "archive"
 
 
 class RecommendationsView(APIView):
-    """GET /api/songs/recommendations — 取得推薦歌曲列表（ItemKNN）"""
+    """GET /api/songs/recommendations — 取得推薦歌曲列表（MF Fold-in / ItemKNN）"""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -324,12 +325,27 @@ class RecommendationsView(APIView):
                 "message": "No recommendations yet. Complete onboarding first.",
             }, status=status.HTTP_200_OK)
 
-        # 2. 查找該使用者最新的推薦批次
-        batch = RecommendationBatch.objects.filter(
-            user=user,
-        ).order_by('-generated_at').first()
+        # 2. 判斷是否使用 MF Fold-in（正樣本 >= 15）
+        positive_count = mf_foldin_store.get_positive_count(user)
+        batch = None
 
-        # 3. Fallback：DB 沒有推薦紀錄時自動算一次
+        if positive_count >= mf_foldin_store.mf_service.MF_MIN_INTERACTIONS:
+            # 嘗試 MF 路徑
+            try:
+                if mf_foldin_store.should_refresh(user):
+                    mf_foldin_store.refresh_stored_mf_recommendations(user, top_n=30)
+                batch = RecommendationBatch.objects.filter(
+                    user=user, algorithm=mf_foldin_store.ALGORITHM_NAME
+                ).order_by('-generated_at').first()
+            except (FileNotFoundError, ValueError) as exc:
+                logger.warning("MF fold-in failed: %s", exc)
+
+        # 3. Fallback 到 ItemKNN
+        if batch is None:
+            batch = RecommendationBatch.objects.filter(
+                user=user,
+            ).order_by('-generated_at').first()
+
         if batch is None:
             try:
                 onboarding_itemknn_store.refresh_stored_itemknn_recommendations(user, top_n=30)
@@ -371,6 +387,7 @@ class RecommendationsView(APIView):
         return Response({
             "status": "success",
             "data": data,
+            "algorithm": batch.algorithm,
         }, status=status.HTTP_200_OK)
 
 
