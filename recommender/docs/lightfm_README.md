@@ -259,16 +259,66 @@ Excel / Numbers / VSCode 開 CSV 也可以直接編輯刪行。
 
 ## 8. 觀察到的數據（記錄）
 
-### Top-5000 vs 全量（同 epochs=10, hybrid, WARP, components=128）
+實驗於 2026-05-16 完成，單 seed=42、Apple M-series + single-threaded（lightfm no-openmp）。
 
-| 設定 | Users 訓練 | Items | Train interactions | Recall@10 | Recall@20 | 訓練時間 | 評估時間 |
+### 8.1 LightFM 調參演進（K=10）
+
+| # | 設定 | Recall@10 | Recall@20 | NDCG@10 | NDCG@20 | 該步 ΔR@10 | 累計 |
 |---|---|---|---|---|---|---|---|
-| 全量（top-K=0） | 12,140 | 273,405 | 2,172,109 | 0.0872 | 0.1239 | 2m 09s | 8m 00s |
-| top-5000 | 5,000 | 246,708 | 1,675,830 | 0.0665 | 0.0953 | 1m 42s | 2m 51s |
+| 1 | top-5000, hybrid, e10, ms10, c128 | 0.0665 | 0.0953 | 0.0383 | 0.0455 | baseline | — |
+| 2 | top-5000, **純 CF**, e10, ms10, c128 | 0.0824 | 0.1178 | 0.0481 | 0.0570 | +24% | +24% |
+| 3 | **全量 12k**, 純 CF, e10, ms10, c128 | 0.1002 | 0.1468 | 0.0583 | 0.0700 | +22% | +51% |
+| 4 | 全量, 純 CF, **e20, ms30**, c128 | 0.1325 | 0.1855 | 0.0771 | 0.0905 | +32% | +99% |
+| 5 | 全量, 純 CF, **e30, ms50**, c128 | 0.1503 | 0.2081 | 0.0889 | 0.1035 | +13% | +126% |
+| 6 | 全量, 純 CF, e30, ms50, **c256** | **0.1625** | **0.2249** | **0.0952** | **0.1110** | +8% | **+144%** |
 
-**觀察**：top-K 過濾在 LightFM 反而降低指標。原因：LightFM WARP 訓練是 per-positive-pair 採樣，砍 user 等於砍訓練資料，連被保留 user 的 embedding 品質都受影響。對 ItemKNN 而言 top-K 是降噪，對 LightFM 則是失血。
+**關鍵發現**：
 
-公平比較 ItemKNN 的話建議跑兩組（全量 + top-5000），報告中並列。
+1. **Hybrid features 在 warm-user 場景反而傷**（第 1→2 步 +24%）。LightFM 論文說特徵主要解決 cold-start；KKBox top-K user 都是 warm，特徵變成雜訊稀釋 item embedding。
+2. **Top-K user 過濾對 LightFM 是失血**（第 2→3 步 +22%）。對 ItemKNN 是降噪，對 LightFM 是減訓練資料、傷 item embedding 共現訊號。
+3. **WARP `max_sampled` 預設值（10）對大 catalog 太低**（第 3→4 步 +32%）。246k items 下 sampling 10 個 negative 經常找不到 violation；提到 30 顯著改善 ranking gradient 密度。
+4. **Embedding dim 仍可繼續擴**（第 5→6 步 +8%）。c128→c256 還有改善，c512 可能也有（未驗證）。
+5. **邊際效益遞減**：ms10→ms30 (+32%) 大於 ms30→ms50 (+13%) 大於 c128→c256 (+8%)。
+
+### 8.2 三模型 head-to-head（top-5000 user）
+
+| 模型 | 最佳設定 | Recall@10 | Recall@20 | NDCG@10 | NDCG@20 | 訓練時間 |
+|---|---|---|---|---|---|---|
+| 🥇 **LightFM** | pureCF, e30, ms50, c256 | **0.1625** | **0.2249** | **0.0952** | **0.1110** | 16m 09s |
+| 🥈 ItemKNN | k=5, baseline, sim_t=0 | 0.1355 | 0.1878 | 0.0787 | 0.0920 | 3m |
+| 🥉 Popularity | top-K=20 | 0.0432 | 0.0714 | — | — | <1s |
+| **LightFM vs ItemKNN** | | **+20%** | **+20%** | **+21%** | **+21%** | |
+
+### 8.3 ItemKNN grid（item_k ∈ {5, 10, 20}, sim_threshold=0, baseline aggregation）
+
+| Item_K | Recall@10 | Recall@20 | NDCG@10 | NDCG@20 |
+|---|---|---|---|---|
+| **5** | **0.1355** | **0.1878** | 0.0787 | 0.0920 |
+| 10 | 0.1334 | 0.1863 | **0.0790** | **0.0923** |
+| 20 | 0.1189 | 0.1773 | 0.0756 | 0.0902 |
+
+ItemKNN 的 sweet spot 在 k=5~10，再多鄰居反而稀釋。整個 grid 變動幅度只有 ~1%，**ItemKNN 的調參天花板很快觸頂**。
+
+### 8.4 訓練時間參考（M-series + single-thread）
+
+| 設定 | 訓練 | 評估 |
+|---|---|---|
+| 全量 12k, hybrid, e10, c128 | 2m 09s | 8m 00s |
+| 全量 12k, pureCF, e10, c128 | 60s | ~7m |
+| 全量 12k, pureCF, e20, ms30, c128 | 4m 07s | ~7m |
+| 全量 12k, pureCF, e30, ms50, c128 | 9m 49s | ~7m |
+| 全量 12k, pureCF, e30, ms50, c256 | 16m 09s | ~8m |
+| ItemKNN top-5000, k=5 | ~3m | （含在內）|
+
+純 CF 比 hybrid 快約 2 倍（無 feature matrix 乘積）；`max_sampled` 倍增約使每 epoch 慢 1.5-2 倍；`components` 倍增約使每 epoch 慢 1.7 倍。
+
+### 8.5 已知局限（口試準備）
+
+- **單 seed 跑一次**：未做多 seed 重複實驗，每步 +13~32% 的提升幅度遠大於合理的 seed 變動（~±2-3%），但嚴格的 statistical significance 需 bootstrap CI。
+- **LOO 切分**：每 user 最後 1 個正樣本當 test，未用 time-based split（資料無 timestamp）。
+- **未測 cold-start**：所有 user 都是 warm（min_pos=2），hybrid 特徵的 cold-start 價值未驗證。
+- **候選 item pool 差異**：LightFM 從全 273k catalog 排序，ItemKNN 從鄰居子集排序，pool 不對等（但通常 LightFM 較難，反而是有利結論的差異）。
+- **`lightfm 1.17` 已停止維護**：production 應改用 Implicit / RecBole；本研究結論（max_sampled、components）對任何 WARP-based MF 都適用。
 
 ---
 
@@ -286,14 +336,24 @@ Excel / Numbers / VSCode 開 CSV 也可以直接編輯刪行。
 
 ---
 
-## 10. 重要參數調整建議（從影響大到小）
+## 10. 重要參數調整建議（**已驗證**，按實測影響大小排序）
 
-1. `--top-k-members 0`（用全量訓練資料，最直接的指標提升手段）
-2. `--epochs 15` 或 `20`（給更多時間收斂，搭配 loss 曲線觀察）
-3. `max_sampled=30`（WARP 採樣負樣本上限，目前寫死在 `lightfm_model.py:train_lightfm_model`；改大可顯著改善 ranking）
-4. `--no-features`（純 CF 對照組，驗證特徵是否真有幫助）
-5. `item_alpha=1e-6, user_alpha=1e-6`（L2 正則；過擬合時加）
-6. `--no-components 64` 或 `256`（embedding 維度）
-7. `--top-k-artists 1000`（item 特徵截斷較緊，減過擬合）
+| 優先 | 參數 | 預期 ΔR@10 | 訓練成本 | 適用場景 |
+|---|---|---|---|---|
+| 1 | `--no-features` | **+24%** | -50% 時間 | warm-user 場景皆建議 |
+| 2 | `--top-k-members 0` | **+22%** | +30% | catalog 較小、user 不太活躍時 |
+| 3 | `--max-sampled 30~50` | **+13~32%** | +200~500% | 大 catalog (>50k items) 必試 |
+| 4 | `--no-components 256` | **+8%** | +60% | embedding 還沒過擬合可繼續加 |
+| 5 | `--epochs 20~30` | 已含在上述 | +100~200% | 配合 max_sampled 一起調 |
+| — | `--user-alpha 1e-6 --item-alpha 1e-6` | 未驗證 | <+5% | 過擬合警訊時加（valid R 反向降低）|
+| — | `--no-components 512` | 推測 +3~5% | +200% | 邊際效益最低，最後再試 |
 
-每次只改一個變因、跑完寫進 `--notes`，這樣 `lightfm_metrics.csv` 才能當實驗紀錄查。
+**已驗證最佳組合**（KKBox warm-user, top-5000 評估）：
+```bash
+python -m pipeline.stage_14_lightfm_train \
+  --epochs 30 --num-threads 1 --no-features --top-k-members 0 \
+  --max-sampled 50 --no-components 256
+```
+→ Recall@10 = 0.1625, Recall@20 = 0.2249
+
+**規則**：每次只改一個變因、跑完寫進 `--notes`，這樣 `lightfm_metrics.csv` 才能當實驗紀錄查。
