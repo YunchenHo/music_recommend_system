@@ -11,7 +11,7 @@ from users.models import (
 
 # Google user 對應 KKBOX msno
 KKBOX_USERS = {
-    "heavy@gmail.com": {
+    "doonghuiyen@gmail.com": {
         "msno_id": 11372,
         "msno": "o+5RNlSWrzvrphgBNGIo1FLkGxBgyICns6qXj3nS7Pk=",
     },
@@ -31,7 +31,7 @@ KKBOX_USERS = {
         "msno_id": 7203,
         "msno": "VHpRaOzuJSgJb5VfbMLKnB6wVuCfBR4YRiStxK7XrN4=",
     },
-    "doonghuiyen@gmail.com": {
+    "english@gmail.com": {
         "msno_id": 3456,
         "msno": "DqwB7smOAIbNnnQbWOpfsmy9znTwfDEQCW1I6ujFG48=",
     },
