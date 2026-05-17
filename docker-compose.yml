@@ -17,14 +17,13 @@ services:
     container_name: music_django
     ports:
       - "8000:8000"
-    depends_on:
-      - db
+      
     env_file:
       - .env
     environment:
-      # 覆寫 .env：容器內必須用 service 名稱 db，不可沿用本機的 127.0.0.1
-      DB_HOST: db
-      DB_PORT: "3306"
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+
     volumes:
       - ./backend:/app  
       - /app/.venv
