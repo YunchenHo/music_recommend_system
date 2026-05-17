@@ -7,6 +7,9 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
     volumes:
       - ./backend:/app
       - /app/.venv

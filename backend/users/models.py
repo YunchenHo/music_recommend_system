@@ -242,3 +242,16 @@ class UserSongAffinity(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.song.song_title} ({self.score:.2f})"
+    
+class UserKKBoxProfile(models.Model):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='kkbox_profile'
+    )
+
+    msno = models.CharField(max_length=255, unique=True)
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} -> {self.msno}"
