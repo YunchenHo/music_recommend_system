@@ -19,7 +19,7 @@ KKBOX_USERS = {
         "msno_id": 4739,
         "msno": "YTpPQjWoHZBKRsjmZCFgTwouQKfWA/cgG4LiQbpubtw=",
     },
-    "chinese@gmail.com": {
+    "jdjh70105@gmail.com": {
         "msno_id": 8771,
         "msno": "c6VEZ/zdVI3Zg5HkaU4Ayb6ZDcZad1lx7kL7d4pVkRQ=",
     },
@@ -31,7 +31,7 @@ KKBOX_USERS = {
         "msno_id": 7203,
         "msno": "VHpRaOzuJSgJb5VfbMLKnB6wVuCfBR4YRiStxK7XrN4=",
     },
-    "english@gmail.com": {
+    "nicolechen7923934@gmail.com": {
         "msno_id": 3456,
         "msno": "DqwB7smOAIbNnnQbWOpfsmy9znTwfDEQCW1I6ujFG48=",
     },
