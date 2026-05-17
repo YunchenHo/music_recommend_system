@@ -14,6 +14,7 @@ services:
       - ./backend:/app
       - /app/.venv
       - ./recommender/artifacts:/app/recommender_artifacts:ro
+      - ./data:/app/data:ro
     command: >
       sh -c "uv run python manage.py migrate &&
              uv run python manage.py import_kkbox_data &&
