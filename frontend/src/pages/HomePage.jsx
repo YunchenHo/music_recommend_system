@@ -9,7 +9,7 @@ import {
   updatePlaylist, deletePlaylist,  
 } from "../api/songs"
 import { searchYouTubeVideoId } from "../api/youtube"
-import { getHistory, createHistory, updateHistory, HISTORY_SOURCE } from "../api/history"
+import { getHistory, createHistory, updateHistory, deleteHistory, HISTORY_SOURCE } from "../api/history"
 import { toggleLike, getLikeStatus } from "../api/likes"
 import { logoutUser } from "../api/auth"
 import { useNavigate } from "react-router-dom"
@@ -338,9 +338,6 @@ export default function HomePage() {
       .catch(console.error)
 
     // 載入歷史紀錄（取最近 20 筆，去重後過濾使用者手動隱藏的歌）
-    const hiddenHistory = new Set(
-      JSON.parse(localStorage.getItem("hiddenHistory") || "[]")
-    )
     getHistory({ limit: 20 })
       .then((resp) => {
         const items = resp?.data ?? []
@@ -348,10 +345,10 @@ export default function HomePage() {
         const deduped = []
         for (const it of items) {
           if (seen.has(it.song_id)) continue
-          if (hiddenHistory.has(it.song_id)) continue
           seen.add(it.song_id)
           deduped.push({
             id: it.song_id,
+            history_id: it.id,
             song_title: it.song_title,
             artist_name: it.artist_name,
             song_image: it.song_image,
@@ -658,10 +655,9 @@ export default function HomePage() {
     }
   }
     // 從歷史紀錄刪除（前端隱藏，後端資料保留供推薦系統使用）
-  const handleDeleteFromHistory = () => {
-    const hidden = JSON.parse(localStorage.getItem("hiddenHistory") || "[]")
-    if (!hidden.includes(selectedSong.id)) {
-      localStorage.setItem("hiddenHistory", JSON.stringify([...hidden, selectedSong.id]))
+  const handleDeleteFromHistory = async () => {
+    if (selectedSong.history_id) {
+      await deleteHistory(selectedSong.history_id).catch(console.error)
     }
     setHistorySongs((prev) => prev.filter((s) => s.id !== selectedSong.id))
   }
