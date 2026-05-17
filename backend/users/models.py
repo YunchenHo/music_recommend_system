@@ -179,6 +179,10 @@ class History(models.Model):
     watch_seconds = models.IntegerField()
     # 使用 choices 來嚴格限制傳入的值
     source = models.CharField(max_length=20, choices=SourceChoices.choices)
+    is_hidden = models.BooleanField(
+        default=False,
+        help_text='True: 使用者主動隱藏這筆歷史紀錄（前端不顯示，但 row 仍保留）',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
