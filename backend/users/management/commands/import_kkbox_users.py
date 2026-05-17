@@ -15,15 +15,15 @@ KKBOX_USERS = {
         "msno_id": 11372,
         "msno": "o+5RNlSWrzvrphgBNGIo1FLkGxBgyICns6qXj3nS7Pk=",
     },
-    "medium@gmail.com": {
+    "yunchenbts0613@gmail.com": {
         "msno_id": 4739,
         "msno": "YTpPQjWoHZBKRsjmZCFgTwouQKfWA/cgG4LiQbpubtw=",
     },
-    "chinese@gmail.com": {
+    "jdjh70105@gmail.com": {
         "msno_id": 8771,
         "msno": "c6VEZ/zdVI3Zg5HkaU4Ayb6ZDcZad1lx7kL7d4pVkRQ=",
     },
-    "korean@gmail.com": {
+    "hyc0603.mg12@nycu.edu.tw": {
         "msno_id": 9252,
         "msno": "eJP7ZSOy+X4USH8FmsI4SPl155s+8h65BoC8xE6dGmc=",
     },
@@ -31,7 +31,7 @@ KKBOX_USERS = {
         "msno_id": 7203,
         "msno": "VHpRaOzuJSgJb5VfbMLKnB6wVuCfBR4YRiStxK7XrN4=",
     },
-    "english@gmail.com": {
+    "nicolechen7923934@gmail.com": {
         "msno_id": 3456,
         "msno": "DqwB7smOAIbNnnQbWOpfsmy9znTwfDEQCW1I6ujFG48=",
     },
