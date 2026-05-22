@@ -63,8 +63,9 @@ def main() -> int:
         import lightfm  # noqa: F401
     except ImportError:
         raise SystemExit(
-            "[LightFM] lightfm is not installed. See pyproject.toml comment for "
-            "instructions on installing in a Python 3.11 venv."
+            "[LightFM] lightfm is not installed in the active venv. "
+            "Root .venv (Py 3.11.13) should have it; see recommender/pyproject.toml "
+            "comment for the patched-sdist install recipe."
         )
 
     from src.models.lightfm_model import LightFMData, evaluate_lightfm
