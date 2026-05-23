@@ -72,12 +72,12 @@ Step 3: 呼叫 model.predict()
 
 ## 5. 對應到我們系統的「分支 B」設計
 
-這就是我們之前說「按 ItemKNN 模式接入」的具體流程：
+按 ItemKNN 模式接入。**現階段**訓練資料用 KKBOX dataset（系統累積資料量不足以單獨訓練）；`db_loader.py` 只負責**inference 時撈該 user 的 features**：
 
 ```
 [離線、週期性] (例如每週跑一次)
-  ┌─ stage_lightfm_train_for_prod.py
-  │   1. 讀 system DB（用 db_loader.py）
+  ┌─ stage_lightfm_train_for_prod.py（現階段：Phase 1）
+  │   1. 讀 KKBOX 訓練資料（train_encoded.parquet + complete_members.parquet + song_features.parquet）
   │   2. 跑 LightFM fit
   │   3. 存到 backend/artifacts/lightfm_model.pkl
   └─
@@ -85,10 +85,54 @@ Step 3: 呼叫 model.predict()
 [線上、即時]
   ┌─ Django backend: GET /api/recommendations/?user_id=7
   │   1. lightfm_service.py 載入 .pkl（行程內快取，一次就好）
-  │   2. 從 DB 撈 user 7 的 features（用 db_loader）
+  │   2. 從系統 DB 撈 user 7 的 features（用 db_loader.py）
   │   3. 手動建 sparse row → predict() → top-K
   │   4. 寫進 UserLightFMRecommendation 表 + 回傳 JSON
   └─
 ```
+
+之所以可行：song catalog 跟 KKBOX 共用（`users_song.id` 就是 KKBOX song_id），所以 KKBOX-trained model 直接能推薦系統 user 也認得的歌。
+
+---
+
+### 之後系統資料夠多時的演進（Phase 2 → 3）
+
+不需要做明確的「切換」動作，而是**漸進式加入系統互動**到訓練 matrix：
+
+**Phase 2 — joint training**（系統 ≥ 5,000 active users 或 ≥ 50,000 explicit interactions）：
+
+```python
+# 合併 interaction matrix
+#   KKBOX 部分：(12,140 個 msno_hash) × 273k songs，target=1
+#   系統部分：(N 個 system_user_id) × 共用 song catalog
+#                來源：UserSongLike.is_liked=True / UserSongAffinity.score>threshold
+
+interactions = vstack([kkbox_interactions, system_interactions])
+sample_weights = np.concatenate([
+    np.ones(kkbox_interactions.nnz),           # KKBOX 權重 1.0
+    np.full(system_pos.nnz, 2.0),              # 系統 explicit positive 加倍
+])
+
+# explicit negative（is_liked=False）→ 不進 matrix，作 inference 時的 post-hoc filter
+
+model.fit(interactions, sample_weight=sample_weights, ...)
+```
+
+system_user 跟 KKBOX msno 是不同的 user，但共用 item embedding 跟 feature 空間（年齡 / 性別 / 城市等可以 map 過去）。
+
+**Phase 3 — 純系統資料**：實務上很少這樣切。多數 production 系統就一路 joint training、永遠不丟歷史資料。
+
+### 何時該啟動 Phase 2 的判準
+
+| 訊號 | 判準 |
+|---|---|
+| 系統活躍 user 數 | ≥ 5,000 |
+| 系統累積 explicit feedback (like/dislike) | ≥ 50,000 |
+| KKBOX-only model 在系統 user 上效果飽和 | 該收新訊號 |
+| KKBOX 跟系統使用者品味落差變大 | 該加系統資料 |
+
+**現在系統只有 2 個真實 user → 還早，先 Phase 1。**
+
+---
 
 幾乎跟 `docs/ITEMKNN_RECOMMENDATION.md` 講的一樣，只是把 ItemKNN 的「找相似 item」換成 LightFM 的「user features + predict」。
