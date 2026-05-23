@@ -78,6 +78,61 @@ const PLAYLIST_ICONS = [
   "tail.svg",
 ]
 
+const LEVEL_TITLES = [
+  "一群芝麻粒", "一塊麵包胚", "一片生菜葉",
+  "一顆煎雞蛋", "一塊大雞排", "一顆漢堡王",
+]
+// 每個等級升到下一級所需 XP：LV1→50, LV2→100, LV3→200, LV4→400, LV5→800
+const LEVEL_XP_THRESHOLDS = [50, 100, 200, 400, 800]
+
+// TODO: 待串接後端 API
+const MOCK_USER_LEVEL = { lv: 6, xp: 800 }
+const MOCK_CHALLENGES = [
+  { id: 1, prefix: "聆聽", n: 3, suffix: "首歌曲", done: false },
+  { id: 2, prefix: "加入", n: 2, suffix: "首歌曲至個人清單", done: true },
+  { id: 3, prefix: "對", n: 4, suffix: "首歌曲按讚或倒讚", done: false },
+]
+
+const SESAME_POSITIONS = [
+  { top: 22, left:  62, rot: -25 },
+  { top: 13, left: 130, rot:  10 },
+  { top: 26, left: 202, rot: -40 },
+  { top:  8, left:  96, rot:  20 },
+  { top: 19, left: 166, rot: -15 },
+  { top: 30, left: 250, rot:  30 },
+]
+
+function BurgerVisual({ lv }) {
+  return (
+    <div className="burger-stack">
+      {lv >= 6 && <div className="burger-crown">👑</div>}
+      {lv >= 2 ? (
+        <div className="burger-top-bun">
+          {SESAME_POSITIONS.map((p, i) => (
+            <div
+              key={i}
+              className="sesame-dot"
+              style={{ top: p.top, left: p.left, transform: `rotate(${p.rot}deg)` }}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="burger-sesame-pile">
+          {[...Array(10)].map((_, i) => <div key={i} className="sesame-pile-seed" />)}
+        </div>
+      )}
+      {lv >= 3 && <div className="burger-lettuce" />}
+      {lv >= 4 && (
+        <div className="burger-egg">
+          <div className="burger-egg-yolk" />
+        </div>
+      )}
+      {lv >= 5 && <div className="burger-chicken" />}
+      {lv >= 2 && <div className="burger-bottom-bun" />}
+    </div>
+  )
+}
+
 
 // ─────────────────────────────────────────────────────
 export default function HomePage() {
@@ -224,6 +279,11 @@ export default function HomePage() {
   const [playlistNameError, setPlaylistNameError] = useState("")
 
   const [openCustomPlaylistId, setOpenCustomPlaylistId] = useState(null)
+  const [isDailyChallengeOpen, setIsDailyChallengeOpen] = useState(false)
+
+  useEffect(() => {
+    setIsDailyChallengeOpen(true)
+  }, [])
 
   // ── 從 API 取得的資料 ──────────────────────────────
   const [user, setUser] = useState({ nickname: "", profilePicture: null })
@@ -928,6 +988,14 @@ export default function HomePage() {
             >
               <img src="/search.svg" alt="search" />
             </button>
+
+            <button
+              className={`nav-icon-btn ${view === "burger" ? "active" : ""}`}
+              onClick={() => setView("burger")}
+              title="我的漢堡"
+            >
+              <img src="/burger.svg" alt="burger" />
+            </button>
           </div>
 
           {/* 右：用戶資訊 */}
@@ -953,14 +1021,37 @@ export default function HomePage() {
                   onClick={() => setIsUserMenuOpen(false)}
                 />
                 <div className="user-dropdown">
-                  <div className="user-dropdown-name">
-                    {user.nickname}
+                  <div className="user-dropdown-name">{user.nickname}</div>
+
+                  <div className="user-dropdown-level">
+                    LV.{MOCK_USER_LEVEL.lv} · {LEVEL_TITLES[MOCK_USER_LEVEL.lv - 1]}
                   </div>
 
+                  <div className="user-dropdown-xp-wrap">
+                    <div
+                      className="user-dropdown-xp-fill"
+                      style={{
+                        width: `${MOCK_USER_LEVEL.lv < 6
+                          ? Math.min((MOCK_USER_LEVEL.xp / LEVEL_XP_THRESHOLDS[MOCK_USER_LEVEL.lv - 1]) * 100, 100)
+                          : 100}%`
+                      }}
+                    />
+                  </div>
+                  <p className="user-dropdown-xp-label">
+                    {MOCK_USER_LEVEL.xp} / {MOCK_USER_LEVEL.lv < 6 ? LEVEL_XP_THRESHOLDS[MOCK_USER_LEVEL.lv - 1] : "MAX"} XP
+                  </p>
+
                   <button
-                    className="logout-btn"
-                    onClick={handleLogout}
+                    className="daily-challenge-open-btn"
+                    onClick={() => {
+                      setIsUserMenuOpen(false)
+                      setIsDailyChallengeOpen(true)
+                    }}
                   >
+                    Daily Challenge
+                  </button>
+
+                  <button className="logout-btn" onClick={handleLogout}>
                     Log Out
                   </button>
                 </div>
@@ -1095,6 +1186,38 @@ export default function HomePage() {
                 )}
 
               </section>
+            </section>
+          )}
+
+          {/* 漢堡視圖 */}
+          {view === "burger" && (
+            <section className="burger-view">
+              <div className="burger-page-header">
+                <h2 className="burger-page-title">你的漢堡</h2>
+                <p className="burger-level-badge">
+                  LV.{MOCK_USER_LEVEL.lv} · {LEVEL_TITLES[MOCK_USER_LEVEL.lv - 1]}
+                </p>
+              </div>
+
+              <div className="burger-visual-container">
+                <BurgerVisual lv={MOCK_USER_LEVEL.lv} />
+              </div>
+
+              <div className="burger-xp-section">
+                <div className="burger-xp-bar-wrap">
+                  <div
+                    className="burger-xp-bar-fill"
+                    style={{
+                      width: `${MOCK_USER_LEVEL.lv < 6
+                        ? Math.min((MOCK_USER_LEVEL.xp / LEVEL_XP_THRESHOLDS[MOCK_USER_LEVEL.lv - 1]) * 100, 100)
+                        : 100}%`
+                    }}
+                  />
+                </div>
+                <p className="burger-xp-label">
+                  {MOCK_USER_LEVEL.xp} / {MOCK_USER_LEVEL.lv < 6 ? LEVEL_XP_THRESHOLDS[MOCK_USER_LEVEL.lv - 1] : "MAX"} XP
+                </p>
+              </div>
             </section>
           )}
 
@@ -1694,7 +1817,35 @@ export default function HomePage() {
 
           </div>
         </div>
-      )}  
+      )}
+
+      {/* ── Daily Challenge Modal ── */}
+      {isDailyChallengeOpen && (
+        <div className="challenge-modal-overlay" onClick={() => setIsDailyChallengeOpen(false)}>
+          <div className="challenge-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="challenge-modal-header">
+              <h2 className="challenge-modal-title">Daily Challenge</h2>
+              <button className="challenge-close-btn" onClick={() => setIsDailyChallengeOpen(false)}>
+                ×
+              </button>
+            </div>
+
+            <div className="challenge-tasks">
+              {MOCK_CHALLENGES.map((task, idx) => (
+                <div key={task.id} className={`challenge-task-row ${task.done ? "done" : ""}`}>
+                  <div className="challenge-task-num">{idx + 1}</div>
+                  <p className="challenge-task-text">
+                    {task.prefix} {task.n} {task.suffix}
+                  </p>
+                  <div className={`challenge-task-check ${task.done ? "checked" : ""}`}>
+                    {task.done ? "✓" : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
