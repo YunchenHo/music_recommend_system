@@ -1069,7 +1069,7 @@ class HistoryView(APIView):
                 "code": "INVALID_LIMIT_OR_OFFSET",
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        queryset = History.objects.filter(user=user).select_related('song')
+        queryset = History.objects.filter(user=user, is_hidden=False).select_related('song')
 
         if song_id is not None:
             queryset = queryset.filter(song_id=song_id)
@@ -1173,6 +1173,31 @@ class HistoryDetailView(APIView):
                 "watch_seconds": history.watch_seconds,
                 "source": history.source,
             },
+        }, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk):
+        try:
+            history = History.objects.get(pk=pk)
+        except History.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "History not found.",
+                "code": "HISTORY_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        if history.user_id != request.user.id:
+            return Response({
+                "status": "error",
+                "message": "History not found.",
+                "code": "HISTORY_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        history.is_hidden = True
+        history.save(update_fields=['is_hidden'])
+
+        return Response({
+            "status": "success",
+            "message": "History hidden.",
         }, status=status.HTTP_200_OK)
 
 

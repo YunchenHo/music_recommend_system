@@ -1,41 +1,27 @@
 services:
-  db:
-    image: mysql:8.0
-    container_name: music_mysql
-    command: --local-infile=1
-    environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME}
-    ports:
-      - "3307:3306"
-    volumes:
-      - db_data:/var/lib/mysql
-
   backend:
-    build: 
+    build:
       context: ./backend
     container_name: music_django
     ports:
       - "8000:8000"
-    depends_on:
-      - db
     env_file:
       - .env
     environment:
-      # 覆寫 .env：容器內必須用 service 名稱 db，不可沿用本機的 127.0.0.1
-      DB_HOST: db
-      DB_PORT: "3306"
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
     volumes:
-      - ./backend:/app  
+      - ./backend:/app
       - /app/.venv
       - ./recommender/artifacts:/app/recommender_artifacts:ro
+      - ./data:/app/data:ro
     command: >
       sh -c "uv run python manage.py migrate &&
              uv run python manage.py import_kkbox_data &&
              uv run python manage.py runserver 0.0.0.0:8000"
-    
+
   frontend:
-    build: 
+    build:
       context: ./frontend
     container_name: music_react
     ports:
@@ -43,7 +29,7 @@ services:
     depends_on:
       - backend
     volumes:
-      - ./frontend:/app 
+      - ./frontend:/app
       - /app/node_modules
 
   recommender:
@@ -59,6 +45,3 @@ services:
     tty: true
     stdin_open: true
     command: bash
-
-volumes:
-  db_data:

@@ -179,6 +179,10 @@ class History(models.Model):
     watch_seconds = models.IntegerField()
     # 使用 choices 來嚴格限制傳入的值
     source = models.CharField(max_length=20, choices=SourceChoices.choices)
+    is_hidden = models.BooleanField(
+        default=False,
+        help_text='True: 使用者主動隱藏這筆歷史紀錄（前端不顯示，但 row 仍保留）',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -242,3 +246,16 @@ class UserSongAffinity(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.song.song_title} ({self.score:.2f})"
+    
+class UserKKBoxProfile(models.Model):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='kkbox_profile'
+    )
+
+    msno = models.CharField(max_length=255, unique=True)
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} -> {self.msno}"

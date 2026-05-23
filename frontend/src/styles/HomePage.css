@@ -1608,3 +1608,37 @@ input:focus {
 
   font-weight: 600;
 }
+
+
+
+
+/* 讓歌名過長時只裁切歌名，不裁切右邊三個點 */
+.playlist-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  overflow: visible; /* 不要裁掉三個點 */
+}
+
+/* 歌名文字才做省略 */
+.playlist-song-title {
+  flex: 1;
+  min-width: 0;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 三個點固定不被壓縮 */
+.playlist-more {
+  flex-shrink: 0;
+  margin-left: 8px;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px 8px;
+  position: relative;
+  z-index: 2;
+}
