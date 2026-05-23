@@ -251,17 +251,22 @@ export default function HomePage() {
   const isRevisitUnlocked = historySongs.length >= 5
   const isFriendsUnlocked = historySongs.length >= 10
 
-  const friendVisible = [
-    ...friendListening,
-    ...friendListening,
-  ].slice(friendStart, friendStart + CARD_PAGE_SIZE)
+  const friendVisible = friendListening.slice(
+    friendStart,
+    friendStart + CARD_PAGE_SIZE
+  )
 
   const handleNextRevisit = () => {
     setRevisitStart((prev) => (prev + CARD_PAGE_SIZE) % FAKE_REVISIT.length)
   }
 
   const handleNextFriend = () => {
-    setFriendStart((prev) => (prev + CARD_PAGE_SIZE) % FAKE_FRIENDS.length)
+    if (friendListening.length <= CARD_PAGE_SIZE) return
+
+    setFriendStart((prev) => {
+      const next = prev + CARD_PAGE_SIZE
+      return next >= friendListening.length ? 0 : next
+    })
   }
 
   const openFriendsModal = () => {
@@ -1060,13 +1065,22 @@ export default function HomePage() {
                           key={item.id}
                           className="friend-card"
                           onClick={() => {
-                            const friendSongs = FAKE_FRIENDS.map((f) => ({
-                              id: f.id,
+                            const friendSongs = friendListening.map((f) => ({
+                              id: f.song_id,
                               song_title: f.song_title,
                               artist_name: f.artist_name,
+                              song_image: f.song_image,
                             }))
-                            const fullIdx = FAKE_FRIENDS.findIndex((f) => f.id === item.id)
-                            handlePlayFromQueue(friendSongs, fullIdx >= 0 ? fullIdx : 0, HISTORY_SOURCE.FRIEND)
+
+                            const fullIdx = friendListening.findIndex(
+                              (f) => f.song_id === item.song_id
+                            )
+
+                            handlePlayFromQueue(
+                              friendSongs,
+                              fullIdx >= 0 ? fullIdx : 0,
+                              HISTORY_SOURCE.FRIEND
+                            )
                           }}
                         >
                           <p className="friend-name">{item.friend_name}</p>

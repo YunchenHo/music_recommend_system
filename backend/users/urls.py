@@ -11,6 +11,9 @@ from .views import (
     HistoryView,
     HistoryDetailView,
     UserSongLikeView,
+    FriendSearchView,
+    FriendListCreateView,
+    FriendListeningView,
 )
 
 urlpatterns = [

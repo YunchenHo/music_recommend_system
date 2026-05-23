@@ -1387,31 +1387,42 @@ class FriendListeningView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        friend_ids = Friendship.objects.filter(
+        friendships = Friendship.objects.filter(
             user=request.user
-        ).values_list("friend_id", flat=True)
+        ).select_related("friend")
 
-        histories = (
-            History.objects
-            .filter(user_id__in=friend_ids, is_hidden=False)
-            .select_related("user", "song")
-            .order_by("-played_at")[:20]
-        )
+        data = []
 
-        data = [
-            {
-                "id": history.song.id,
-                "friend_name": history.user.nickname or history.user.username,
-                "song_title": history.song.song_title,
-                "artist_name": history.song.artist_name,
-                "song_image": history.song.song_image,
-            }
-            for history in histories
-        ]
+        for friendship in friendships:
+            friend = friendship.friend
+
+            latest_history = (
+                History.objects
+                .filter(user=friend, is_hidden=False)
+                .select_related("song")
+                .order_by("-played_at")
+                .first()
+            )
+
+            if latest_history is None:
+                continue
+
+            song = latest_history.song
+
+            data.append({
+                "id": f"{friend.id}-{song.id}",
+                "friend_id": friend.id,
+                "friend_name": friend.nickname or friend.username,
+                "song_id": song.id,
+                "song_title": song.song_title,
+                "artist_name": song.artist_name,
+                "song_image": song.song_image,
+                "played_at": latest_history.played_at,
+            })
 
         return Response({
             "status": "success",
             "data": data,
-        })
+        }, status=status.HTTP_200_OK)
 
 
