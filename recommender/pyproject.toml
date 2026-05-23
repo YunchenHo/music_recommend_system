@@ -28,3 +28,13 @@ members = [
 metal = [
     "tensorflow-metal==1.1.*",
 ]
+# LightFM is intentionally NOT listed as a dependency here.
+# lightfm 1.17 (last release, 2023) cannot build under Python 3.12 (distutils
+# removed) or with modern setuptools (>=70). Install it manually in a
+# Python 3.11 venv or Colab:
+#   uv venv --python 3.11 .venv-lightfm
+#   source .venv-lightfm/bin/activate
+#   CFLAGS="-I/opt/homebrew/opt/libomp/include" \
+#   LDFLAGS="-L/opt/homebrew/opt/libomp/lib -lomp" \
+#   uv pip install lightfm pandas scipy numpy tqdm pyarrow scikit-learn
+# Then run stage_14_lightfm_train / stage_15_lightfm_eval inside that venv.

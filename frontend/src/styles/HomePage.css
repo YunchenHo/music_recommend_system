@@ -1525,7 +1525,7 @@ input:focus {
   top: 58px;
   right: 0;
 
-  width: 220px;
+  width: 280px;
 
   background: #bfe0ff;
   border: 3px solid #5d6bd6;
@@ -1535,7 +1535,7 @@ input:focus {
 
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
 
   z-index: 9999;
 
@@ -1543,36 +1543,30 @@ input:focus {
 }
 
 .user-dropdown-name {
-  font-size: 2rem;
+  font-size: 1.8rem;
   font-weight: 700;
   color: #4b2ca3;
-
+  text-align: center;
   word-break: break-word;
 }
 
-/* logout button */
+/* logout button — 與 daily-challenge-open-btn 一致 */
 .logout-btn {
   width: 100%;
-
   border: none;
   border-radius: 16px;
-
-  background: #6e6fe0;
+  background: #4b5fd1;
   color: white;
-
-  font-size: 1.6rem;
+  font-size: 1rem;
   font-weight: 700;
-
-  padding: 14px 0;
-
+  font-family: 'jf open 粉圓', 'Noto Sans TC', sans-serif;
+  padding: 12px 0;
   cursor: pointer;
-
-  transition: transform 0.15s ease,
-              background 0.2s ease;
+  transition: transform 0.15s ease, background 0.2s ease;
 }
 
 .logout-btn:hover {
-  background: #5d5fd6;
+  background: #3a4ec0;
   transform: translateY(-2px);
 }
 
@@ -1641,4 +1635,362 @@ input:focus {
   padding: 4px 8px;
   position: relative;
   z-index: 2;
+}
+
+
+/* ══════════════════════════════════════════
+   User Dropdown 新增欄位
+   ══════════════════════════════════════════ */
+.user-dropdown-level {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #5d6bd6;
+  margin-top: -8px;
+}
+
+.user-dropdown-xp-wrap {
+  width: 100%;
+  height: 12px;
+  background: #dde8ff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.user-dropdown-xp-fill {
+  height: 100%;
+  background: #4b5fd1;
+  border-radius: 8px;
+  transition: width 0.3s ease;
+}
+
+.user-dropdown-xp-label {
+  font-size: 0.75rem;
+  color: #4b5fd1;
+  font-weight: 600;
+  text-align: right;
+  margin-top: -4px;
+}
+
+.daily-challenge-open-btn {
+  width: 100%;
+  border: none;
+  border-radius: 16px;
+  background: #4b5fd1;
+  color: white;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: 'jf open 粉圓', 'Noto Sans TC', sans-serif;
+  padding: 12px 0;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+
+.daily-challenge-open-btn:hover {
+  background: #3a4ec0;
+  transform: translateY(-2px);
+}
+
+/* ══════════════════════════════════════════
+   漢堡分頁 View
+   ══════════════════════════════════════════ */
+.burger-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  padding-top: 20px;
+}
+
+.burger-page-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.burger-page-title {
+  font-family: 'Changa One', sans-serif;
+  font-size: 2.4rem;
+  color: var(--red-dark);
+}
+
+.burger-level-badge {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-mid);
+  background: var(--pink-light);
+  border: 2.5px solid var(--pink-border);
+  border-radius: 20px;
+  padding: 7px 24px;
+  display: inline-block;
+}
+
+.burger-visual-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+/* ── 漢堡堆疊 ── */
+.burger-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 336px;
+}
+
+.burger-crown {
+  font-size: 74px;
+  line-height: 1;
+  margin-bottom: -6px;
+}
+
+/* 頂部麵包胚（有芝麻）*/
+.burger-top-bun {
+  width: 336px;
+  height: 108px;
+  background: linear-gradient(160deg, #e8954c 0%, #c87234 100%);
+  border-radius: 50% 50% 10% 10% / 70% 70% 20% 20%;
+  position: relative;
+  box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.1);
+}
+
+/* 芝麻點 */
+.sesame-dot {
+  position: absolute;
+  width: 24px;
+  height: 12px;
+  background: #f5d89a;
+  border-radius: 50%;
+}
+
+/* LV1：芝麻粒堆 */
+.burger-sesame-pile {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  width: 264px;
+  padding: 29px 24px;
+  background: var(--pink-light);
+  border: 3px dashed var(--pink-border);
+  border-radius: 20px;
+}
+
+.sesame-pile-seed {
+  width: 26px;
+  height: 13px;
+  background: #f5d89a;
+  border-radius: 50%;
+  transform: rotate(calc(var(--i, 0) * 37deg));
+}
+
+/* 生菜葉 */
+.burger-lettuce {
+  width: 370px;
+  height: 31px;
+  background: #66bb6a;
+  margin: -1px 0;
+  clip-path: polygon(
+    0% 100%, 0% 55%, 3% 20%, 6% 55%, 9% 20%,
+    12% 55%, 15% 20%, 18% 55%, 21% 20%, 24% 55%,
+    27% 20%, 30% 55%, 33% 20%, 36% 55%, 39% 20%,
+    42% 55%, 45% 20%, 48% 55%, 51% 20%, 54% 55%,
+    57% 20%, 60% 55%, 63% 20%, 66% 55%, 69% 20%,
+    72% 55%, 75% 20%, 78% 55%, 81% 20%, 84% 55%,
+    87% 20%, 90% 55%, 93% 20%, 96% 55%, 99% 20%,
+    100% 55%, 100% 100%
+  );
+}
+
+/* 煎雞蛋 */
+.burger-egg {
+  width: 294px;
+  height: 70px;
+  background: #fffde7;
+  border-radius: 50%;
+  position: relative;
+  margin: -1px 0;
+  box-shadow: 0 2px 0 #e8e8c0;
+}
+
+.burger-egg-yolk {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  background: #ffc107;
+  border-radius: 50%;
+  top: 12px;
+  left: calc(50% - 23px);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* 大雞排 */
+.burger-chicken {
+  width: 318px;
+  height: 62px;
+  background: linear-gradient(160deg, #ca8040 0%, #a86230 100%);
+  border-radius: 14px;
+  margin: -1px 0;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.12);
+}
+
+/* 底部麵包胚 */
+.burger-bottom-bun {
+  width: 336px;
+  height: 62px;
+  background: linear-gradient(180deg, #d4884c 0%, #b8682e 100%);
+  border-radius: 0 0 40% 40% / 0 0 60% 60%;
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.08);
+}
+
+/* XP 進度 */
+.burger-xp-section {
+  text-align: center;
+  width: 336px;
+}
+
+.burger-xp-bar-wrap {
+  width: 100%;
+  height: 22px;
+  background: var(--pink-light);
+  border: 2.5px solid var(--pink-border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.burger-xp-bar-fill {
+  height: 100%;
+  background: var(--pink-border);
+  border-radius: 10px;
+  transition: width 0.4s ease;
+}
+
+.burger-xp-label {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-mid);
+}
+
+/* ══════════════════════════════════════════
+   Daily Challenge Modal
+   ══════════════════════════════════════════ */
+.challenge-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(221, 242, 186, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.challenge-modal {
+  width: 60vw;
+  height: 60vh;
+  background: #a9d6f5;
+  border-radius: 28px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.challenge-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.challenge-modal-title {
+  font-family: 'Changa One', sans-serif;
+  font-size: 2rem;
+  color: #111;
+  flex: 1;
+}
+
+.challenge-close-btn {
+  border: none;
+  background: transparent;
+  font-size: 2.2rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: #ff6b6b;
+  line-height: 1;
+}
+
+.challenge-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* 任務方格：填滿同邊框色 */
+.challenge-task-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #7b71e1;
+  border: 3px solid #7b71e1;
+  border-radius: 18px;
+  padding: 16px 18px;
+  flex-shrink: 0;
+}
+
+/* 數字圓圈：白底 + 對應邊框色 */
+.challenge-task-num {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  background: white;
+  border: 3px solid #7b71e1;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #7b71e1;
+}
+
+/* 任務文字 */
+.challenge-task-text {
+  flex: 1;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: white;
+  font-family: 'jf open 粉圓', 'Noto Sans TC', sans-serif;
+}
+
+.challenge-n {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #ffe4a0;
+}
+
+/* 勾勾圓圈：白底 + 邊框色（完成後變綠）*/
+.challenge-task-check {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  background: white;
+  border: 3px solid #7b71e1;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #7b71e1;
+}
+
+.challenge-task-check.checked {
+  border-color: #4caf50;
+  color: #4caf50;
 }
