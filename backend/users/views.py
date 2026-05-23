@@ -34,6 +34,7 @@ from .models import (
     History,
     UserSongLike,
     UserSongAffinity,
+    Friendship,
 )
 
 logger = logging.getLogger(__name__)
@@ -1273,3 +1274,144 @@ class UserSongLikeView(APIView):
                 defaults={'is_liked': intent_like},
             )
         return Response({"status": "success", "data": {"is_liked": intent_like}})
+    
+
+class FriendSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        email = request.query_params.get("email", "").strip()
+
+        if not email:
+            return Response({
+                "status": "error",
+                "message": "email is required.",
+                "code": "MISSING_EMAIL",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "User not found.",
+                "code": "USER_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        if user.id == request.user.id:
+            return Response({
+                "status": "error",
+                "message": "You cannot add yourself.",
+                "code": "CANNOT_ADD_SELF",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            "status": "success",
+            "data": {
+                "id": user.id,
+                "username": user.nickname or user.username,
+                "email": user.email,
+                "profile_picture": user.profile_picture,
+            }
+        })
+    
+
+class FriendListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        friendships = Friendship.objects.filter(
+            user=request.user
+        ).select_related("friend")
+
+        data = [
+            {
+                "id": item.friend.id,
+                "username": item.friend.nickname or item.friend.username,
+                "email": item.friend.email,
+                "profile_picture": item.friend.profile_picture,
+            }
+            for item in friendships
+        ]
+
+        return Response({
+            "status": "success",
+            "data": data,
+        })
+
+    def post(self, request):
+        friend_id = request.data.get("friend_id")
+
+        if not friend_id:
+            return Response({
+                "status": "error",
+                "message": "friend_id is required.",
+                "code": "MISSING_FRIEND_ID",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            friend = User.objects.get(id=friend_id)
+        except User.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "User not found.",
+                "code": "USER_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        if friend.id == request.user.id:
+            return Response({
+                "status": "error",
+                "message": "You cannot add yourself.",
+                "code": "CANNOT_ADD_SELF",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        friendship, created = Friendship.objects.get_or_create(
+            user=request.user,
+            friend=friend,
+        )
+
+        if not created:
+            return Response({
+                "status": "error",
+                "message": "Already friends.",
+                "code": "ALREADY_FRIENDS",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            "status": "success",
+            "message": "Friend added.",
+        }, status=status.HTTP_201_CREATED)
+    
+
+class FriendListeningView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        friend_ids = Friendship.objects.filter(
+            user=request.user
+        ).values_list("friend_id", flat=True)
+
+        histories = (
+            History.objects
+            .filter(user_id__in=friend_ids, is_hidden=False)
+            .select_related("user", "song")
+            .order_by("-played_at")[:20]
+        )
+
+        data = [
+            {
+                "id": history.song.id,
+                "friend_name": history.user.nickname or history.user.username,
+                "song_title": history.song.song_title,
+                "artist_name": history.song.artist_name,
+                "song_image": history.song.song_image,
+            }
+            for history in histories
+        ]
+
+        return Response({
+            "status": "success",
+            "data": data,
+        })
+
+

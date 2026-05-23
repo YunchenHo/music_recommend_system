@@ -14,6 +14,13 @@ import { toggleLike, getLikeStatus } from "../api/likes"
 import { logoutUser } from "../api/auth"
 import { useNavigate } from "react-router-dom"
 
+import {
+  searchFriend,
+  getMyFriends,
+  addFriend,
+  getFriendListening,
+} from "../api/friends"
+
 // ── 推薦歌曲（從 API 取得）
 
 const FAKE_REVISIT = [
@@ -196,11 +203,8 @@ export default function HomePage() {
   const [friendSearchInput, setFriendSearchInput] = useState("")
   const [searchedUser, setSearchedUser] = useState(null)
   const [friendSearchError, setFriendSearchError] = useState("")
-  const [myFriends, setMyFriends] = useState([
-    { id: 101, username: "小美", profile_picture: null },
-    { id: 102, username: "智華", profile_picture: null },
-    { id: 103, username: "雅婷", profile_picture: null },
-  ])
+  const [myFriends, setMyFriends] = useState([])
+  const [friendListening, setFriendListening] = useState([])
 
   const [customPlaylists, setCustomPlaylists] = useState([])
   // Each playlist: { id, playlist_name, song_count, songs: [...] | null }
@@ -248,8 +252,8 @@ export default function HomePage() {
   const isFriendsUnlocked = historySongs.length >= 10
 
   const friendVisible = [
-    ...FAKE_FRIENDS,
-    ...FAKE_FRIENDS,
+    ...friendListening,
+    ...friendListening,
   ].slice(friendStart, friendStart + CARD_PAGE_SIZE)
 
   const handleNextRevisit = () => {
@@ -276,43 +280,40 @@ export default function HomePage() {
     setFriendSearchError("")
   }
 
-  const handleSearchFriend = () => {
-    const keyword = friendSearchInput.trim().toLowerCase()
+  const handleSearchFriend = async () => {
+    const email = friendSearchInput.trim()
 
-    if (!keyword) {
+    if (!email) {
       setSearchedUser(null)
       setFriendSearchError("請輸入 Gmail")
       return
     }
 
-    const foundUser = FAKE_USERS.find(
-      (user) => user.gmail.toLowerCase() === keyword
-    )
+    try {
+      const user = await searchFriend(email)
 
-    if (foundUser) {
-      setSearchedUser(foundUser)
+      setSearchedUser(user)
       setFriendSearchError("")
-    } else {
+    } catch (err) {
       setSearchedUser(null)
       setFriendSearchError("查無此人")
     }
   }
 
-  const handleAddFriend = (user) => {
-    const alreadyAdded = myFriends.some((friend) => friend.username === user.username)
+  const handleAddFriend = async (user) => {
+    try {
+      await addFriend(user.id)
 
-    if (!alreadyAdded) {
-      setMyFriends((prev) => [
-        ...prev,
-        {
-          id: user.id,
-          username: user.username,
-          profile_picture: user.profile_picture || null,
-        },
-      ])
+      const friends = await getMyFriends()
+      setMyFriends(friends)
+
+      const listening = await getFriendListening()
+      setFriendListening(listening)
+
+      closeFriendsModal()
+    } catch (err) {
+      setFriendSearchError("新增好友失敗")
     }
-
-    closeFriendsModal()
   }
 
   // 頁面載入時取得用戶資訊、收藏清單、推薦歌曲、自訂清單、歷史紀錄
@@ -359,6 +360,15 @@ export default function HomePage() {
         setHistorySongs(deduped)
       })
       .catch(console.error)
+
+    getMyFriends()
+      .then((data) => setMyFriends(data))
+      .catch(console.error)
+
+    getFriendListening()
+      .then((data) => setFriendListening(data))
+      .catch(console.error)
+
   }, [])
 
   // 把上一首的「實際聽到秒數」PATCH 進已建立的那筆 history
