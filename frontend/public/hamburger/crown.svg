@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 110" width="160" height="110">
+  
+  <path d="M 10 95 L 10 35 L 35 60 L 55 15 L 80 60 L 105 15 L 125 60 L 150 35 L 150 95 Z" fill="#F4C430" stroke="#6B3410" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"></path>
+  
+  <path d="M 10 75 L 150 75 L 150 95 L 10 95 Z" fill="#E5A82A" stroke="#6B3410" stroke-width="4.5" stroke-linejoin="round"></path>
+  
+  <circle cx="40" cy="85" r="5.5" fill="#E74C3C" stroke="#6B3410" stroke-width="2"></circle>
+  <circle cx="80" cy="85" r="6.5" fill="#3F8AE0" stroke="#6B3410" stroke-width="2"></circle>
+  <circle cx="120" cy="85" r="5.5" fill="#E74C3C" stroke="#6B3410" stroke-width="2"></circle>
+  
+  <circle cx="10" cy="35" r="6" fill="#F4C430" stroke="#6B3410" stroke-width="3"></circle>
+  <circle cx="55" cy="15" r="7" fill="#F4C430" stroke="#6B3410" stroke-width="3"></circle>
+  <circle cx="105" cy="15" r="7" fill="#F4C430" stroke="#6B3410" stroke-width="3"></circle>
+  <circle cx="150" cy="35" r="6" fill="#F4C430" stroke="#6B3410" stroke-width="3"></circle>
+  
+  <path d="M 18 40 L 18 70" stroke="#FFE898" stroke-width="3" stroke-linecap="round" opacity="0.7"></path>
+</svg>

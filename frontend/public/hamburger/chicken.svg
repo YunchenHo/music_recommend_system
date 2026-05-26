@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 110" width="360" height="110">
+  
+  <path d="M 20 30&#xA;           Q 25 12 50 14&#xA;           Q 90 8 130 14 Q 170 8 200 14 Q 240 8 280 14 Q 320 10 340 18&#xA;           Q 355 25 350 50&#xA;           Q 355 80 330 92&#xA;           Q 290 100 250 94 Q 210 102 170 94 Q 130 102 90 94 Q 50 100 25 88&#xA;           Q 8 75 14 50 Q 16 38 20 30 Z" fill="#E8742C" stroke="#6B3410" stroke-width="5" stroke-linejoin="round"></path>
+  
+  <g fill="#B85416">
+    <circle cx="60" cy="35" r="3"></circle>
+    <circle cx="95" cy="50" r="2.5"></circle>
+    <circle cx="130" cy="32" r="3"></circle>
+    <circle cx="170" cy="48" r="2.5"></circle>
+    <circle cx="205" cy="34" r="3"></circle>
+    <circle cx="245" cy="50" r="2.5"></circle>
+    <circle cx="285" cy="36" r="3"></circle>
+    <circle cx="320" cy="48" r="2.5"></circle>
+    <circle cx="75" cy="72" r="2.5"></circle>
+    <circle cx="115" cy="80" r="3"></circle>
+    <circle cx="155" cy="72" r="2.5"></circle>
+    <circle cx="195" cy="80" r="3"></circle>
+    <circle cx="235" cy="72" r="2.5"></circle>
+    <circle cx="275" cy="80" r="3"></circle>
+    <circle cx="310" cy="74" r="2.5"></circle>
+  </g>
+  
+  <path d="M 40 22 Q 80 16 120 20" fill="none" stroke="#FFB060" stroke-width="4" stroke-linecap="round" opacity="0.6"></path>
+</svg>

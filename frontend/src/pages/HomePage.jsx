@@ -93,49 +93,29 @@ const LEVEL_TITLES = [
 const LEVEL_XP_THRESHOLDS = [50, 100, 200, 400, 800]
 
 // TODO: 待串接後端 API
-const MOCK_USER_LEVEL = { lv: 6, xp: 800 }
+const MOCK_USER_LEVEL = { lv: 1, xp: 0 }
 const MOCK_CHALLENGES = [
   { id: 1, prefix: "聆聽", n: 3, suffix: "首歌曲", done: false },
   { id: 2, prefix: "加入", n: 2, suffix: "首歌曲至個人清單", done: true },
   { id: 3, prefix: "對", n: 4, suffix: "首歌曲按讚或倒讚", done: false },
 ]
 
-const SESAME_POSITIONS = [
-  { top: 22, left:  62, rot: -25 },
-  { top: 13, left: 130, rot:  10 },
-  { top: 26, left: 202, rot: -40 },
-  { top:  8, left:  96, rot:  20 },
-  { top: 19, left: 166, rot: -15 },
-  { top: 30, left: 250, rot:  30 },
-]
-
 function BurgerVisual({ lv }) {
   return (
     <div className="burger-stack">
-      {lv >= 6 && <div className="burger-crown">👑</div>}
+      {lv >= 6 && <img src="/hamburger/crown.svg" className="burger-crown" alt="crown" />}
       {lv >= 2 ? (
-        <div className="burger-top-bun">
-          {SESAME_POSITIONS.map((p, i) => (
-            <div
-              key={i}
-              className="sesame-dot"
-              style={{ top: p.top, left: p.left, transform: `rotate(${p.rot}deg)` }}
-            />
-          ))}
+        <div className="burger-top-bun-wrap">
+          <img src="/hamburger/top-bun.svg" className="burger-top-bun" alt="top bun" />
+          <img src="/hamburger/sesame.svg"  className="burger-sesame-on-bun" alt="sesame" />
         </div>
       ) : (
-        <div className="burger-sesame-pile">
-          {[...Array(10)].map((_, i) => <div key={i} className="sesame-pile-seed" />)}
-        </div>
+        <img src="/hamburger/sesame.svg" className="burger-sesame-pile" alt="sesame" />
       )}
-      {lv >= 3 && <div className="burger-lettuce" />}
-      {lv >= 4 && (
-        <div className="burger-egg">
-          <div className="burger-egg-yolk" />
-        </div>
-      )}
-      {lv >= 5 && <div className="burger-chicken" />}
-      {lv >= 2 && <div className="burger-bottom-bun" />}
+      {lv >= 3 && <img src="/hamburger/lettuce.svg"    className="burger-lettuce"    alt="lettuce"    />}
+      {lv >= 4 && <img src="/hamburger/egg.svg"        className="burger-egg"        alt="egg"        />}
+      {lv >= 5 && <img src="/hamburger/chicken.svg"    className="burger-chicken"    alt="chicken"    />}
+      {lv >= 2 && <img src="/hamburger/bottom-bun.svg" className="burger-bottom-bun" alt="bottom bun" />}
     </div>
   )
 }
