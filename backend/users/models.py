@@ -106,9 +106,18 @@ class UserOnboardingSong(models.Model):
         return f"{self.user} - {self.song}"
 
 
+class PlaylistIcon(models.Model):
+    filename = models.CharField(max_length=100, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.filename
+
+
 class Playlist(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='playlists')
     playlist_name = models.CharField(max_length=255)
+    icon = models.ForeignKey(PlaylistIcon, null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

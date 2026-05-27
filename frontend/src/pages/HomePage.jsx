@@ -6,7 +6,8 @@ import {
   getPlaylists, createPlaylist, getPlaylistSongs, addSongToPlaylist,
   removeSongFromPlaylist, 
   searchSongs,
-  updatePlaylist, deletePlaylist,  
+  updatePlaylist, deletePlaylist,
+  getPlaylistIcons,
 } from "../api/songs"
 import { searchYouTubeVideoId } from "../api/youtube"
 import { getHistory, createHistory, updateHistory, HISTORY_SOURCE } from "../api/history"
@@ -64,7 +65,7 @@ const FAKE_USERS = [
   },
 ]
 
-const PLAYLIST_ICONS = [
+const PLAYLIST_ICONS_FALLBACK = [
   "yeah-rabbit.svg",
   "mifi.svg",
   "jojo.svg",
@@ -218,7 +219,8 @@ export default function HomePage() {
   const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false)
   const [playlistModalView, setPlaylistModalView] = useState("list")
   // "list" | "create"
-  const [selectedPlaylistIcon, setSelectedPlaylistIcon] = useState(PLAYLIST_ICONS[0])
+  const [playlistIcons, setPlaylistIcons] = useState([])  // [{ id, filename }, ...]
+  const [selectedPlaylistIcon, setSelectedPlaylistIcon] = useState(null)  // icon object { id, filename }
 
   const [newPlaylistName, setNewPlaylistName] = useState("")
   const [playlistNameError, setPlaylistNameError] = useState("")
@@ -327,6 +329,13 @@ export default function HomePage() {
 
     getRecommendations()
       .then((data) => setRecommendations(data))
+      .catch(console.error)
+
+    getPlaylistIcons()
+      .then((data) => {
+        setPlaylistIcons(data)
+        if (data.length > 0) setSelectedPlaylistIcon(data[0])
+      })
       .catch(console.error)
 
     getPlaylists()
@@ -571,7 +580,7 @@ export default function HomePage() {
     setIsPlaylistModalOpen(false)
     setPlaylistModalView("list")
     setNewPlaylistName("")
-    setSelectedPlaylistIcon(PLAYLIST_ICONS[0])
+    setSelectedPlaylistIcon(playlistIcons[0] || null)
     setPlaylistNameError("")
   }
 
@@ -616,16 +625,16 @@ export default function HomePage() {
     }
 
     try {
-      const newPlaylist = await createPlaylist(trimmedName)
+      const newPlaylist = await createPlaylist(trimmedName, selectedPlaylistIcon?.id)
       if (currentSong) {
         await addSongToPlaylist(newPlaylist.id, currentSong.id)
         setCustomPlaylists((prev) => [...prev, {
-          ...newPlaylist, playlist_icon: selectedPlaylistIcon,
+          ...newPlaylist,
           song_count: 1, songs: [currentSong],
         }])
       } else {
         setCustomPlaylists((prev) => [...prev, {
-          ...newPlaylist, icon: selectedPlaylistIcon, songs: null,
+          ...newPlaylist, songs: null,
         }])
       }
       closePlaylistModal()
@@ -831,7 +840,7 @@ export default function HomePage() {
                 onClick={() => handleToggleCustomPlaylist(playlist.id)}
               >
                 <div className="playlist-card-thumb">
-                  <img src={`/album_icon/${playlist.playlist_icon || PLAYLIST_ICONS[0]}`} alt={playlist.playlist_name} />
+                  <img src={`/album_icon/${playlist.icon?.filename || PLAYLIST_ICONS_FALLBACK[0]}`} alt={playlist.playlist_name} />
                 </div>
                 <div className="playlist-card-info">
                   <span
@@ -841,7 +850,7 @@ export default function HomePage() {
 
                       setEditingPlaylist(playlist)
                       setEditName(playlist.playlist_name)
-                      setEditIcon(playlist.playlist_icon || PLAYLIST_ICONS[0])
+                      setEditIcon(playlist.icon?.filename || PLAYLIST_ICONS_FALLBACK[0])
                       setEditView("menu")
                       setIsEditPlaylistModalOpen(true)
                     }}
@@ -1410,7 +1419,7 @@ export default function HomePage() {
                       onClick={() => handleAddSongToPlaylist(playlist.id)}
                     >
                       <div className="playlist-modal-item-icon">
-                        <img src={`/album_icon/${playlist.playlist_icon || PLAYLIST_ICONS[0]}`} alt={playlist.playlist_name} />
+                        <img src={`/album_icon/${playlist.icon?.filename || PLAYLIST_ICONS_FALLBACK[0]}`} alt={playlist.playlist_name} />
                       </div>
 
                       <div className="playlist-modal-item-info">
@@ -1482,14 +1491,14 @@ export default function HomePage() {
                   <div className="playlist-icon-section">
                     <label className="playlist-input-label">Playlist Icon</label>
                     <div className="playlist-icon-grid">
-                      {PLAYLIST_ICONS.map((icon) => (
+                      {playlistIcons.map((icon) => (
                         <button
-                          key={icon}
+                          key={icon.id}
                           type="button"
-                          className={`playlist-icon-option ${selectedPlaylistIcon === icon ? "selected" : ""}`}
+                          className={`playlist-icon-option ${selectedPlaylistIcon?.id === icon.id ? "selected" : ""}`}
                           onClick={() => setSelectedPlaylistIcon(icon)}
                         >
-                          <img src={`/album_icon/${icon}`} alt={icon} />
+                          <img src={`/album_icon/${icon.filename}`} alt={icon.filename} />
                         </button>
                       ))}
                     </div>
@@ -1651,16 +1660,16 @@ export default function HomePage() {
             {editView === "icon" && (
               <>
                 <div className="icon-grid">
-                  {PLAYLIST_ICONS.map(icon => (
+                  {playlistIcons.map(icon => (
                     <img
-                      key={icon}
-                      src={`/album_icon/${icon}`}
-                      onClick={() => setEditIcon(icon)}
+                      key={icon.id}
+                      src={`/album_icon/${icon.filename}`}
+                      onClick={() => setEditIcon(icon.filename)}
                       style={{
                         width: 90,
-                        height: 90,            // ⭐加這行（固定高度）
-                        objectFit: "contain",  // ⭐加這行（不變形）
-                        border: editIcon === icon ? "2px solid blue" : "none",
+                        height: 90,
+                        objectFit: "contain",
+                        border: editIcon === icon.filename ? "2px solid blue" : "none",
                         borderRadius: 8,
                         cursor: "pointer"
                       }}
@@ -1670,15 +1679,22 @@ export default function HomePage() {
 
                 <button
                   className="delete-btn"
-                  onClick={() => {
-                    setCustomPlaylists(prev =>
-                      prev.map(p =>
-                        p.id === editingPlaylist.id
-                          ? { ...p, playlist_icon: editIcon }
-                          : p
-                      )
-                    )
-
+                  onClick={async () => {
+                    const iconObj = playlistIcons.find(i => i.filename === editIcon)
+                    if (iconObj) {
+                      try {
+                        await updatePlaylist(editingPlaylist.id, undefined, iconObj.id)
+                        setCustomPlaylists(prev =>
+                          prev.map(p =>
+                            p.id === editingPlaylist.id
+                              ? { ...p, icon: iconObj }
+                              : p
+                          )
+                        )
+                      } catch (err) {
+                        console.error("更新 icon 失敗", err)
+                      }
+                    }
                     setIsEditPlaylistModalOpen(false)
                   }}
                 >

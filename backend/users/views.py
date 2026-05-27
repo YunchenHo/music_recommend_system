@@ -19,14 +19,14 @@ from django.db import transaction
 from google.oauth2 import id_token
 from google.auth.transport import requests
 
-from . import onboarding_itemknn_store
-from .affinity_score import AFFINITY_FILTER_THRESHOLD
+from . import lightfm_service, onboarding_itemknn_store
 from .models import (
     User,
     Artist,
     Song,
     UserOnboardingArtist,
     UserOnboardingSong,
+    PlaylistIcon,
     Playlist,
     PlaylistSong,
     RecommendationBatch,
@@ -304,11 +304,11 @@ class OnboardingSubmitView(APIView):
         ])
 
         try:
+            # NOTE: ItemKNN pre-computation kept for potential future use.
+            # LightFM hybrid is now used for cold-start recommendations.
             onboarding_itemknn_store.refresh_stored_itemknn_recommendations(user)
-        except FileNotFoundError as exc:
-            logger.warning("ItemKNN refresh skipped (artifact missing): %s", exc)
-        except ValueError as exc:
-            logger.warning("ItemKNN refresh skipped (invalid artifact): %s", exc)
+        except (FileNotFoundError, ValueError, Exception):
+            pass  # Non-critical; LightFM hybrid doesn't depend on this
 
         return Response({
             "status": "success",
@@ -324,7 +324,12 @@ ARCHIVE_PLAYLIST_NAME = "archive"
 
 
 class RecommendationsView(APIView):
-    """GET /api/songs/recommendations — 取得推薦歌曲列表（ItemKNN）"""
+    """GET /api/songs/recommendations — 取得推薦歌曲列表
+
+    自動切換演算法：
+    - 歷史不重複歌曲數 >= LIGHTFM_MIN_HISTORY → LightFM Pure CF
+    - 否則 → LightFM Hybrid（user features + onboarding embeddings）
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -339,73 +344,171 @@ class RecommendationsView(APIView):
                 "message": "No recommendations yet. Complete onboarding first.",
             }, status=status.HTTP_200_OK)
 
-        # 2. 查找該使用者最新的推薦批次
-        batch = RecommendationBatch.objects.filter(
-            user=user,
-        ).order_by('-generated_at').first()
+        # 2. 取得歷史和 onboarding 歌曲
+        history_song_ids = list(
+            History.objects.filter(user=user)
+            .values_list('song_id', flat=True).distinct()
+        )
+        current_count = len(history_song_ids)
 
-        # 3. Fallback：DB 沒有推薦紀錄時自動算一次
-        if batch is None:
-            try:
-                onboarding_itemknn_store.refresh_stored_itemknn_recommendations(user, top_n=30)
-                batch = RecommendationBatch.objects.filter(
-                    user=user,
-                ).order_by('-generated_at').first()
-            except FileNotFoundError as exc:
-                logger.warning("ItemKNN refresh failed (artifact missing): %s", exc)
-            except ValueError as exc:
-                logger.warning("ItemKNN refresh failed (invalid artifact): %s", exc)
+        # 3. 判斷是否需要重新計算
+        batch_count = RecommendationBatch.objects.filter(user=user).count()
 
-        if batch is None:
+        if batch_count > 0:
+            needs_recalc = (current_count // 10) > (batch_count - 1)
+        else:
+            needs_recalc = True
+
+        # 4. 不需要重算 → 從 DB 最新 batch 讀取
+        if not needs_recalc:
+            return self._read_latest_batch(user)
+
+        # 5. 需要重算
+        onboarding_song_ids = list(
+            UserOnboardingSong.objects.filter(user=user)
+            .values_list('song_id', flat=True)
+        )
+        exclude = set(history_song_ids) | set(onboarding_song_ids)
+
+        # 6. 選擇演算法
+        if current_count >= settings.LIGHTFM_MIN_HISTORY:
+            result = self._recommend_purecf(user, history_song_ids, exclude)
+            if result is not None:
+                return result
+            logger.info("PureCF unavailable for user %s, trying hybrid fallback", user.id)
+
+        # 7. Hybrid 冷啟動（或 PureCF fallback）
+        result = self._recommend_hybrid(user, onboarding_song_ids, exclude)
+        if result is not None:
+            return result
+
+        # 8. 全部失敗
+        return Response({
+            "status": "success",
+            "data": [],
+            "message": "Recommendations temporarily unavailable.",
+            "algorithm": "none",
+        }, status=status.HTTP_200_OK)
+
+    def _recommend_purecf(self, user, history_song_ids: list[int], exclude: set[int]):
+        """Pure CF 推薦。成功回傳 Response，失敗回傳 None。"""
+        try:
+            rec_ids, scores = lightfm_service.recommend_purecf(
+                history_song_ids=history_song_ids,
+                exclude_song_ids=exclude,
+                top_n=20,
+            )
+        except Exception as exc:
+            logger.warning("PureCF recommend failed: %s", exc)
+            return None
+
+        if not rec_ids:
+            return None
+
+        return self._build_response(user, rec_ids, scores, "LightFM-PureCF")
+
+    def _recommend_hybrid(self, user, onboarding_song_ids: list[int], exclude: set[int]):
+        """Hybrid 冷啟動推薦。成功回傳 Response，失敗回傳 None。"""
+        try:
+            rec_ids, scores = lightfm_service.recommend_hybrid(
+                user=user,
+                onboarding_song_ids=onboarding_song_ids,
+                exclude_song_ids=exclude,
+                top_n=20,
+            )
+        except Exception as exc:
+            logger.warning("Hybrid recommend failed: %s", exc)
+            return None
+
+        if not rec_ids:
+            return None
+
+        return self._build_response(user, rec_ids, scores, "LightFM-Hybrid")
+
+    def _read_latest_batch(self, user):
+        """從 DB 讀取最新的推薦批次回傳。"""
+        latest_batch = (
+            RecommendationBatch.objects.filter(user=user)
+            .order_by('-generated_at')
+            .first()
+        )
+        if latest_batch is None:
             return Response({
                 "status": "success",
                 "data": [],
                 "message": "Recommendations temporarily unavailable.",
+                "algorithm": "none",
             }, status=status.HTTP_200_OK)
 
-        # 4. 載入批次內所有候選（之後要重排與過濾，不能只取前 9）
-        items = list(
-            RecommendationItem.objects
-            .filter(batch=batch)
-            .select_related('song')
-        )
-
-        # 5. 取使用者對候選歌的 affinity（沒紀錄者預設 0）
-        song_ids = [item.song_id for item in items]
-        affinity_map = dict(
-            UserSongAffinity.objects
-            .filter(user=user, song_id__in=song_ids)
-            .values_list('song_id', 'score')
-        )
-
-        # 6. 套重排公式 final = itemknn_score * (1 + affinity)，並過濾 affinity < threshold
-        reranked: list[tuple[float, RecommendationItem]] = []
+        items = latest_batch.items.select_related('song').order_by('rank')[:9]
+        data = []
         for item in items:
-            affinity = affinity_map.get(item.song_id, 0.0)
-            if affinity < AFFINITY_FILTER_THRESHOLD:
-                continue
-            final_score = item.score * (1.0 + affinity)
-            reranked.append((final_score, item))
-
-        # 7. 依 final_score 重排，取前 9
-        reranked.sort(key=lambda pair: pair[0], reverse=True)
-        top = reranked[:9]
-
-        data = [
-            {
-                "rank": new_rank,
-                "id": item.song.id,
-                "song_title": item.song.song_title,
-                "artist_name": item.song.artist_name,
-                "song_image": item.song.song_image,
-                "language": item.song.language,
-            }
-            for new_rank, (_, item) in enumerate(top, start=1)
-        ]
+            song = item.song
+            data.append({
+                "rank": item.rank,
+                "id": song.id,
+                "song_title": song.song_title,
+                "artist_name": song.artist_name,
+                "song_image": song.song_image,
+                "language": song.language,
+            })
 
         return Response({
             "status": "success",
             "data": data,
+            "algorithm": latest_batch.algorithm,
+        }, status=status.HTTP_200_OK)
+
+    def _build_response(self, user, rec_ids: list[int], scores: list[float], algorithm: str):
+        """從推薦 song_id list 建構 API Response，並存入 DB。"""
+        from django.utils import timezone
+
+        songs = Song.objects.filter(id__in=rec_ids)
+        song_map = {s.id: s for s in songs}
+
+        data = []
+        valid_ids = []
+        valid_scores = []
+        for i, sid in enumerate(rec_ids):
+            if sid not in song_map:
+                continue
+            data.append({
+                "rank": len(data) + 1,
+                "id": sid,
+                "song_title": song_map[sid].song_title,
+                "artist_name": song_map[sid].artist_name,
+                "song_image": song_map[sid].song_image,
+                "language": song_map[sid].language,
+            })
+            valid_ids.append(sid)
+            valid_scores.append(scores[i] if i < len(scores) else 0.0)
+            if len(data) == 9:
+                break
+
+        if not data:
+            return None
+
+        # 寫入 DB
+        batch = RecommendationBatch.objects.create(
+            user=user,
+            algorithm=algorithm,
+            generated_at=timezone.now(),
+            total_size=len(data),
+        )
+        RecommendationItem.objects.bulk_create([
+            RecommendationItem(
+                batch=batch,
+                rank=i + 1,
+                song_id=valid_ids[i],
+                score=valid_scores[i],
+            )
+            for i in range(len(valid_ids))
+        ])
+
+        return Response({
+            "status": "success",
+            "data": data,
+            "algorithm": algorithm,
         }, status=status.HTTP_200_OK)
 
 
@@ -604,6 +707,16 @@ class DevLoginView(APIView):
 # ---------------------------------------------------------------------------
 
 
+class PlaylistIconListView(APIView):
+    """GET /api/playlists/icons/ — 取得所有可用的 playlist icon"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        icons = PlaylistIcon.objects.all().order_by('id')
+        data = [{"id": icon.id, "filename": icon.filename} for icon in icons]
+        return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
+
+
 class PlaylistListCreateView(APIView):
     """
     GET  /api/playlists/      — 列出使用者自訂清單（排除 archive）+ 歌曲數量
@@ -616,6 +729,7 @@ class PlaylistListCreateView(APIView):
             Playlist.objects
             .filter(user=request.user)
             .exclude(playlist_name=ARCHIVE_PLAYLIST_NAME)
+            .select_related('icon')
             .annotate(song_count=Count('songs'))
             .order_by('created_at')
         )
@@ -624,6 +738,7 @@ class PlaylistListCreateView(APIView):
             {
                 "id": p.id,
                 "playlist_name": p.playlist_name,
+                "icon": {"id": p.icon.id, "filename": p.icon.filename} if p.icon else None,
                 "song_count": p.song_count,
                 "created_at": p.created_at.isoformat(),
                 "updated_at": p.updated_at.isoformat(),
@@ -660,9 +775,19 @@ class PlaylistListCreateView(APIView):
                 "code": "NAME_TOO_LONG",
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        # 處理 icon
+        icon = None
+        icon_id = request.data.get('icon_id')
+        if icon_id is not None:
+            try:
+                icon = PlaylistIcon.objects.get(id=icon_id)
+            except PlaylistIcon.DoesNotExist:
+                pass
+
         playlist = Playlist.objects.create(
             user=request.user,
             playlist_name=playlist_name,
+            icon=icon,
         )
 
         return Response({
@@ -671,6 +796,7 @@ class PlaylistListCreateView(APIView):
             "data": {
                 "id": playlist.id,
                 "playlist_name": playlist.playlist_name,
+                "icon": {"id": icon.id, "filename": icon.filename} if icon else None,
                 "song_count": 0,
                 "created_at": playlist.created_at.isoformat(),
                 "updated_at": playlist.updated_at.isoformat(),
@@ -710,36 +836,52 @@ class PlaylistDetailView(APIView):
             }, status=status.HTTP_403_FORBIDDEN)
 
         new_name = request.data.get('playlist_name', '').strip()
-        if not new_name:
+        icon_id = request.data.get('icon_id')
+
+        # 至少要有一個欄位要更新
+        if not new_name and icon_id is None:
             return Response({
                 "status": "error",
-                "message": "Playlist name is required.",
-                "code": "MISSING_PLAYLIST_NAME",
+                "message": "playlist_name or icon_id is required.",
+                "code": "MISSING_FIELDS",
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        if new_name.lower() == ARCHIVE_PLAYLIST_NAME:
-            return Response({
-                "status": "error",
-                "message": "Cannot use reserved playlist name.",
-                "code": "RESERVED_NAME",
-            }, status=status.HTTP_400_BAD_REQUEST)
+        if new_name:
+            if new_name.lower() == ARCHIVE_PLAYLIST_NAME:
+                return Response({
+                    "status": "error",
+                    "message": "Cannot use reserved playlist name.",
+                    "code": "RESERVED_NAME",
+                }, status=status.HTTP_400_BAD_REQUEST)
 
-        if len(new_name) > 255:
-            return Response({
-                "status": "error",
-                "message": "Playlist name is too long (max 255 characters).",
-                "code": "NAME_TOO_LONG",
-            }, status=status.HTTP_400_BAD_REQUEST)
+            if len(new_name) > 255:
+                return Response({
+                    "status": "error",
+                    "message": "Playlist name is too long (max 255 characters).",
+                    "code": "NAME_TOO_LONG",
+                }, status=status.HTTP_400_BAD_REQUEST)
 
-        playlist.playlist_name = new_name
+            playlist.playlist_name = new_name
+
+        if icon_id is not None:
+            try:
+                playlist.icon = PlaylistIcon.objects.get(id=icon_id)
+            except PlaylistIcon.DoesNotExist:
+                return Response({
+                    "status": "error",
+                    "message": "Icon not found.",
+                    "code": "ICON_NOT_FOUND",
+                }, status=status.HTTP_404_NOT_FOUND)
+
         playlist.save()
 
         return Response({
             "status": "success",
-            "message": "Playlist renamed.",
+            "message": "Playlist updated.",
             "data": {
                 "id": playlist.id,
                 "playlist_name": playlist.playlist_name,
+                "icon": {"id": playlist.icon.id, "filename": playlist.icon.filename} if playlist.icon else None,
             },
         }, status=status.HTTP_200_OK)
 

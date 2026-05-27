@@ -29,6 +29,7 @@ _tmp_dataset/
 !recommender/src/data/*.py
 # MF 訓練產物太大，明確排除
 recommender/artifacts/mf_*
+recommender/artifacts/lightfm_*.npz
 recommender/artifacts/*.npy
 recommender/artifacts/*.h5
 

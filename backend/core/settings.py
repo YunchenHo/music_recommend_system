@@ -150,6 +150,16 @@ ITEMKNN_ARTIFACT_PATH = os.environ.get(
     "ITEMKNN_ARTIFACT_PATH",
     str(RECOMMENDER_ARTIFACTS_DIR / "itemknn_artifacts.npz"),
 )
+LIGHTFM_PURECF_ARTIFACT_PATH = os.environ.get(
+    "LIGHTFM_PURECF_ARTIFACT_PATH",
+    str(RECOMMENDER_ARTIFACTS_DIR / "lightfm_purecf.npz"),
+)
+LIGHTFM_HYBRID_ARTIFACT_PATH = os.environ.get(
+    "LIGHTFM_HYBRID_ARTIFACT_PATH",
+    str(RECOMMENDER_ARTIFACTS_DIR / "lightfm_hybrid.npz"),
+)
+LIGHTFM_MIN_HISTORY = 10  # 用戶歷史不重複歌曲數達此閾值後切換到 LightFM PureCF
+LIGHTFM_HYBRID_ALPHA = 0.5  # feature_vector vs taste_vector 的混合比例
 
 # Session Settings
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'  

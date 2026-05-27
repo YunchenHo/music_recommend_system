@@ -39,23 +39,34 @@ export async function getSongDetail(songId) {
 
 // ── Playlist API ─────────────────────────────────────
 
+/** GET /api/playlists/icons/ — 取得所有可用的 playlist icon */
+export async function getPlaylistIcons() {
+  const { data } = await api.get("/api/playlists/icons/")
+  return data.data  // [{ id, filename }, ...]
+}
+
 /** GET /api/playlists/ — 取得使用者自訂清單（不含 archive） */
 export async function getPlaylists() {
   const { data } = await api.get("/api/playlists/")
-  return data.data  // [{ id, playlist_name, song_count, created_at, updated_at }, ...]
+  return data.data  // [{ id, playlist_name, icon, song_count, created_at, updated_at }, ...]
 }
 
 
 /** POST /api/playlists/ — 建立新清單 */
-export async function createPlaylist(playlistName) {
-  const { data } = await api.post("/api/playlists/", { playlist_name: playlistName })
-  return data.data  // { id, playlist_name, song_count, created_at, updated_at }
+export async function createPlaylist(playlistName, iconId) {
+  const payload = { playlist_name: playlistName }
+  if (iconId !== undefined) payload.icon_id = iconId
+  const { data } = await api.post("/api/playlists/", payload)
+  return data.data  // { id, playlist_name, icon, song_count, created_at, updated_at }
 }
 
-/** PATCH /api/playlists/<id>/ — 修改清單名稱 */
-export async function updatePlaylist(playlistId, playlistName) {
-  const { data } = await api.patch(`/api/playlists/${playlistId}/`, { playlist_name: playlistName })
-  return data.data  // { id, playlist_name }
+/** PATCH /api/playlists/<id>/ — 修改清單名稱或圖示 */
+export async function updatePlaylist(playlistId, playlistName, iconId) {
+  const payload = {}
+  if (playlistName !== undefined) payload.playlist_name = playlistName
+  if (iconId !== undefined) payload.icon_id = iconId
+  const { data } = await api.patch(`/api/playlists/${playlistId}/`, payload)
+  return data.data  // { id, playlist_name, icon }
 }
 
 /** DELETE /api/playlists/<id>/ — 刪除清單 */
