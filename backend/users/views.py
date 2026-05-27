@@ -35,6 +35,7 @@ from .models import (
     UserSongLike,
     UserSongAffinity,
     Friendship,
+    FriendRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -1274,7 +1275,7 @@ class UserSongLikeView(APIView):
                 defaults={'is_liked': intent_like},
             )
         return Response({"status": "success", "data": {"is_liked": intent_like}})
-    
+
 
 class FriendSearchView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1313,10 +1314,10 @@ class FriendSearchView(APIView):
                 "email": user.email,
                 "profile_picture": user.profile_picture,
             }
-        })
-    
+        }, status=status.HTTP_200_OK)
 
-class FriendListCreateView(APIView):
+
+class FriendListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -1337,7 +1338,11 @@ class FriendListCreateView(APIView):
         return Response({
             "status": "success",
             "data": data,
-        })
+        }, status=status.HTTP_200_OK)
+
+
+class SendFriendRequestView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         friend_id = request.data.get("friend_id")
@@ -1350,7 +1355,7 @@ class FriendListCreateView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            friend = User.objects.get(id=friend_id)
+            to_user = User.objects.get(id=friend_id)
         except User.DoesNotExist:
             return Response({
                 "status": "error",
@@ -1358,30 +1363,139 @@ class FriendListCreateView(APIView):
                 "code": "USER_NOT_FOUND",
             }, status=status.HTTP_404_NOT_FOUND)
 
-        if friend.id == request.user.id:
+        if to_user.id == request.user.id:
             return Response({
                 "status": "error",
                 "message": "You cannot add yourself.",
                 "code": "CANNOT_ADD_SELF",
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        friendship, created = Friendship.objects.get_or_create(
+        already_friends = Friendship.objects.filter(
             user=request.user,
-            friend=friend,
-        )
+            friend=to_user
+        ).exists()
 
-        if not created:
+        if already_friends:
             return Response({
                 "status": "error",
                 "message": "Already friends.",
                 "code": "ALREADY_FRIENDS",
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        friend_request, created = FriendRequest.objects.get_or_create(
+            from_user=request.user,
+            to_user=to_user,
+            defaults={"status": FriendRequest.StatusChoices.PENDING}
+        )
+
+        if not created and friend_request.status == FriendRequest.StatusChoices.PENDING:
+            return Response({
+                "status": "error",
+                "message": "Friend request already sent.",
+                "code": "REQUEST_ALREADY_SENT",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if not created:
+            friend_request.status = FriendRequest.StatusChoices.PENDING
+            friend_request.save(update_fields=["status"])
+
         return Response({
             "status": "success",
-            "message": "Friend added.",
+            "message": "Friend request sent.",
         }, status=status.HTTP_201_CREATED)
-    
+
+
+class FriendRequestListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        requests_qs = FriendRequest.objects.filter(
+            to_user=request.user,
+            status=FriendRequest.StatusChoices.PENDING
+        ).select_related("from_user").order_by("-created_at")
+
+        data = [
+            {
+                "id": item.id,
+                "from_user": {
+                    "id": item.from_user.id,
+                    "username": item.from_user.nickname or item.from_user.username,
+                    "email": item.from_user.email,
+                    "profile_picture": item.from_user.profile_picture,
+                },
+                "created_at": item.created_at,
+            }
+            for item in requests_qs
+        ]
+
+        return Response({
+            "status": "success",
+            "data": data,
+        }, status=status.HTTP_200_OK)
+
+
+class AcceptFriendRequestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, request_id):
+        try:
+            friend_request = FriendRequest.objects.select_related("from_user").get(
+                id=request_id,
+                to_user=request.user,
+                status=FriendRequest.StatusChoices.PENDING
+            )
+        except FriendRequest.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Friend request not found.",
+                "code": "REQUEST_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        with transaction.atomic():
+            friend_request.status = FriendRequest.StatusChoices.ACCEPTED
+            friend_request.save(update_fields=["status"])
+
+            Friendship.objects.get_or_create(
+                user=request.user,
+                friend=friend_request.from_user
+            )
+
+            Friendship.objects.get_or_create(
+                user=friend_request.from_user,
+                friend=request.user
+            )
+
+        return Response({
+            "status": "success",
+            "message": "Friend request accepted.",
+        }, status=status.HTTP_200_OK)
+
+
+class RejectFriendRequestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, request_id):
+        try:
+            friend_request = FriendRequest.objects.get(
+                id=request_id,
+                to_user=request.user,
+                status=FriendRequest.StatusChoices.PENDING
+            )
+        except FriendRequest.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Friend request not found.",
+                "code": "REQUEST_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        friend_request.status = FriendRequest.StatusChoices.REJECTED
+        friend_request.save(update_fields=["status"])
+
+        return Response({
+            "status": "success",
+            "message": "Friend request rejected.",
+        }, status=status.HTTP_200_OK)
+
 
 class FriendListeningView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1424,5 +1538,4 @@ class FriendListeningView(APIView):
             "status": "success",
             "data": data,
         }, status=status.HTTP_200_OK)
-
 
