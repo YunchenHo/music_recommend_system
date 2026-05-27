@@ -12,6 +12,7 @@ import { searchYouTubeVideoId } from "../api/youtube"
 import { getHistory, createHistory, updateHistory, deleteHistory, HISTORY_SOURCE } from "../api/history"
 import { toggleLike, getLikeStatus } from "../api/likes"
 import { logoutUser } from "../api/auth"
+import { getChallengeXP, getTodayChallenges, completeChallenge } from "../api/challenge"
 import { useNavigate } from "react-router-dom"
 
 import {
@@ -23,16 +24,6 @@ import {
 
 // ── 推薦歌曲（從 API 取得）
 
-const FAKE_REVISIT = [
-  { id: 2001, song_title: "Lover", artist_name: "Taylor Swift" },
-  { id: 2002, song_title: "Baby", artist_name: "Justin Bieber" },
-  { id: 2003, song_title: "Let It Go", artist_name: "Elsa" },
-  { id: 2004, song_title: "Honey Pie", artist_name: "Jawny" },
-  { id: 2005, song_title: "Flowers", artist_name: "Miley Cyrus" },
-  { id: 2006, song_title: "Sorry", artist_name: "Justin Bieber" },
-  { id: 2007, song_title: "Dynamite", artist_name: "BTS" },
-  { id: 2008, song_title: "Someone Like You", artist_name: "Adele" },
-]
 
 const FAKE_FRIENDS = [
   { id: 3001, friend_name: "小美", song_title: "River Flows in You", artist_name: "Yiruma" },
@@ -84,6 +75,34 @@ const PLAYLIST_ICONS = [
   "star.svg",
   "tail.svg",
 ]
+
+const LEVEL_TITLES = [
+  "一群芝麻粒", "一塊麵包胚", "一片生菜葉",
+  "一顆煎雞蛋", "一塊大雞排", "一顆漢堡王",
+]
+// 每個等級升到下一級所需 XP：LV1→50, LV2→100, LV3→200, LV4→400, LV5→800
+const LEVEL_XP_THRESHOLDS = [50, 100, 200, 400, 800]
+
+
+function BurgerVisual({ lv }) {
+  return (
+    <div className="burger-stack">
+      {lv >= 6 && <img src="/hamburger/crown.svg" className="burger-crown" alt="crown" />}
+      {lv >= 2 ? (
+        <div className="burger-top-bun-wrap">
+          <img src="/hamburger/top-bun.svg" className="burger-top-bun" alt="top bun" />
+          <img src="/hamburger/sesame.svg"  className="burger-sesame-on-bun" alt="sesame" />
+        </div>
+      ) : (
+        <img src="/hamburger/sesame.svg" className="burger-sesame-pile" alt="sesame" />
+      )}
+      {lv >= 3 && <img src="/hamburger/lettuce.svg"    className="burger-lettuce"    alt="lettuce"    />}
+      {lv >= 4 && <img src="/hamburger/egg.svg"        className="burger-egg"        alt="egg"        />}
+      {lv >= 5 && <img src="/hamburger/chicken.svg"    className="burger-chicken"    alt="chicken"    />}
+      {lv >= 2 && <img src="/hamburger/bottom-bun.svg" className="burger-bottom-bun" alt="bottom bun" />}
+    </div>
+  )
+}
 
 
 // ─────────────────────────────────────────────────────
@@ -228,6 +247,42 @@ export default function HomePage() {
   const [playlistNameError, setPlaylistNameError] = useState("")
 
   const [openCustomPlaylistId, setOpenCustomPlaylistId] = useState(null)
+  const [isDailyChallengeOpen, setIsDailyChallengeOpen] = useState(false)
+  const [userLevel, setUserLevel] = useState({ lv: 1, xp: 0, xp_in_level: 0, xp_for_level: 50 })
+  const [challenges, setChallenges] = useState([])
+  const [toast, setToast] = useState(null)       // null | { prefix, n, suffix }
+  const [toastHiding, setToastHiding] = useState(false)
+  const toastTimerRef = useRef(null)
+
+  useEffect(() => {
+    setIsDailyChallengeOpen(true)
+    getChallengeXP().then(setUserLevel).catch(() => {})
+    getTodayChallenges().then(setChallenges).catch(() => {})
+  }, [])
+
+  const showToast = useCallback((task) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToastHiding(false)
+    setToast(task)
+    toastTimerRef.current = setTimeout(() => {
+      setToastHiding(true)
+      setTimeout(() => setToast(null), 400)
+    }, 2500)
+  }, [])
+
+  /** 動作後重新抓取挑戰狀態，並偵測新完成的任務顯示 toast */
+  const refreshChallenges = useCallback(() => {
+    getTodayChallenges().then(newChallenges => {
+      setChallenges(prev => {
+        const newlyDone = newChallenges.find(nc =>
+          nc.is_completed && !prev.find(oc => oc.id === nc.id)?.is_completed
+        )
+        if (newlyDone) showToast(newlyDone)
+        return newChallenges
+      })
+    }).catch(() => {})
+    getChallengeXP().then(setUserLevel).catch(() => {})
+  }, [showToast])
 
   // ── 從 API 取得的資料 ──────────────────────────────
   const [user, setUser] = useState({ nickname: "", profilePicture: null })
@@ -243,12 +298,9 @@ export default function HomePage() {
   // 收藏狀態由 favorites 清單推導（不需要額外 state）
   const isSaved = currentSong ? favorites.some((f) => f.id === currentSong.id) : false
 
-    const revisitVisible = [
-    ...FAKE_REVISIT,
-    ...FAKE_REVISIT,
-  ].slice(revisitStart, revisitStart + CARD_PAGE_SIZE)
+    const isRevisitUnlocked = historySongs.length >= 5
 
-  const isRevisitUnlocked = historySongs.length >= 5
+  const revisitVisible = historySongs.slice(revisitStart, revisitStart + CARD_PAGE_SIZE)
   const isFriendsUnlocked = historySongs.length >= 10
 
   const friendVisible = friendListening.slice(
@@ -257,7 +309,11 @@ export default function HomePage() {
   )
 
   const handleNextRevisit = () => {
-    setRevisitStart((prev) => (prev + CARD_PAGE_SIZE) % FAKE_REVISIT.length)
+    if (historySongs.length <= CARD_PAGE_SIZE) return
+    setRevisitStart((prev) => {
+      const next = prev + CARD_PAGE_SIZE
+      return next >= historySongs.length ? 0 : next
+    })
   }
 
   const handleNextFriend = () => {
@@ -343,26 +399,19 @@ export default function HomePage() {
       )
       .catch(console.error)
 
-    // 載入歷史紀錄（取最近 20 筆，去重後過濾使用者手動隱藏的歌）
+    // 載入歷史紀錄（後端已按 song_id 去重，limit = 20 首不同歌）
     getHistory({ limit: 20 })
       .then((resp) => {
         const items = resp?.data ?? []
-        const seen = new Set()
-        const deduped = []
-        for (const it of items) {
-          if (seen.has(it.song_id)) continue
-          seen.add(it.song_id)
-          deduped.push({
-            id: it.song_id,
-            history_id: it.id,
-            song_title: it.song_title,
-            artist_name: it.artist_name,
-            song_image: it.song_image,
-            album_name: it.album_name,
-            language: it.language,
-          })
-        }
-        setHistorySongs(deduped)
+        setHistorySongs(items.map((it) => ({
+          id: it.song_id,
+          history_id: it.id,
+          song_title: it.song_title,
+          artist_name: it.artist_name,
+          song_image: it.song_image,
+          album_name: it.album_name,
+          language: it.language,
+        })))
       })
       .catch(console.error)
 
@@ -499,6 +548,8 @@ export default function HomePage() {
       // is_liked: true / false / null（取消）
       setLiked(isLiked === true)
       setDisliked(isLiked === false)
+      // 有設定讚/倒讚（非取消）才算進挑戰
+      if (isLiked !== null) refreshChallenges()
     } catch (err) {
       console.error("toggle like 失敗", err)
     }
@@ -602,6 +653,7 @@ export default function HomePage() {
           return { ...p, song_count: p.song_count + 1, songs: newSongs }
         })
       )
+      refreshChallenges()  // 加歌到清單 → type 2
       closePlaylistModal()
     } catch (err) {
       // 409 或 400 表示歌已在清單中
@@ -640,6 +692,7 @@ export default function HomePage() {
           ...newPlaylist, icon: selectedPlaylistIcon, songs: null,
         }])
       }
+      refreshChallenges()  // 新創清單 → type 5
       closePlaylistModal()
     } catch (err) {
       console.error("建立清單失敗", err)
@@ -968,9 +1021,25 @@ export default function HomePage() {
                   onClick={() => setIsUserMenuOpen(false)}
                 />
                 <div className="user-dropdown">
-                  <div className="user-dropdown-name">
-                    {user.nickname}
+                  <div className="user-dropdown-name">{user.nickname}</div>
+
+                  <div className="user-dropdown-level">
+                    LV.{userLevel.lv} · {LEVEL_TITLES[userLevel.lv - 1]}
                   </div>
+
+                  <div className="user-dropdown-xp-wrap">
+                    <div
+                      className="user-dropdown-xp-fill"
+                      style={{
+                        width: `${userLevel.lv < 6
+                          ? Math.min((userLevel.xp_in_level / userLevel.xp_for_level) * 100, 100)
+                          : 100}%`
+                      }}
+                    />
+                  </div>
+                  <p className="user-dropdown-xp-label">
+                    {userLevel.lv < 6 ? userLevel.xp_in_level : "MAX"} / {userLevel.lv < 6 ? userLevel.xp_for_level : "MAX"} XP
+                  </p>
 
                   <button
                     className="logout-btn"
@@ -1017,13 +1086,13 @@ export default function HomePage() {
                     </div>
 
                     <div className="horizontal-card-list">
-                      {revisitVisible.map((song) => (
+                      {revisitVisible.map((song, idx) => (
                         <div
                           key={song.id}
                           className={`small-song-card ${currentSong?.id === song.id ? "active" : ""}`}
                           onClick={() => {
-                            const fullIdx = FAKE_REVISIT.findIndex((s) => s.id === song.id)
-                            handlePlayFromQueue(FAKE_REVISIT, fullIdx >= 0 ? fullIdx : 0, HISTORY_SOURCE.RECOMMENDATION)
+                            const fullIdx = revisitStart + idx
+                            handlePlayFromQueue(historySongs, fullIdx, HISTORY_SOURCE.PLAYLIST)
                           }}
                         >
                           <p className="small-song-title">{song.song_title}</p>
@@ -1119,6 +1188,38 @@ export default function HomePage() {
                 )}
 
               </section>
+            </section>
+          )}
+
+          {/* 漢堡視圖 */}
+          {view === "burger" && (
+            <section className="burger-view">
+              <div className="burger-page-header">
+                <h2 className="burger-page-title">你的漢堡</h2>
+                <p className="burger-level-badge">
+                  LV.{userLevel.lv} · {LEVEL_TITLES[userLevel.lv - 1]}
+                </p>
+              </div>
+
+              <div className="burger-visual-container">
+                <BurgerVisual lv={userLevel.lv} />
+              </div>
+
+              <div className="burger-xp-section">
+                <div className="burger-xp-bar-wrap">
+                  <div
+                    className="burger-xp-bar-fill"
+                    style={{
+                      width: `${userLevel.lv < 6
+                        ? Math.min((userLevel.xp_in_level / userLevel.xp_for_level) * 100, 100)
+                        : 100}%`
+                    }}
+                  />
+                </div>
+                <p className="burger-xp-label">
+                  {userLevel.lv < 6 ? userLevel.xp_in_level : "MAX"} / {userLevel.lv < 6 ? userLevel.xp_for_level : "MAX"} XP
+                </p>
+              </div>
             </section>
           )}
 
@@ -1718,7 +1819,64 @@ export default function HomePage() {
 
           </div>
         </div>
-      )}  
+      )}
+
+      {/* ── Challenge 完成 Toast ── */}
+      {toast && (
+        <div className={`challenge-toast ${toastHiding ? "hiding" : ""}`}>
+          <div className="challenge-toast-check">✓</div>
+          <div className="challenge-toast-body">
+            <span className="challenge-toast-label">Daily Challenge Complete</span>
+            <span className="challenge-toast-desc">{toast.prefix} {toast.n} {toast.suffix}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Daily Challenge Modal ── */}
+      {isDailyChallengeOpen && (
+        <div className="challenge-modal-overlay" onClick={() => setIsDailyChallengeOpen(false)}>
+          <div className="challenge-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="challenge-modal-header">
+              <h2 className="challenge-modal-title">Daily Challenge</h2>
+              <button className="challenge-close-btn" onClick={() => setIsDailyChallengeOpen(false)}>
+                ×
+              </button>
+            </div>
+
+            <div className="challenge-tasks">
+              {challenges.map((task, idx) => (
+                <div key={task.id} className={`challenge-task-row ${task.is_completed ? "done" : ""}`}>
+                  <div className="challenge-task-num">{idx + 1}</div>
+                  <p className="challenge-task-text">
+                    {task.prefix} {task.n} {task.suffix}
+                  </p>
+                  <div
+                    className={`challenge-task-check ${task.is_completed ? "checked" : ""}`}
+                    onClick={async () => {
+                      if (task.is_completed) return
+                      const result = await completeChallenge(task.id)
+                      setChallenges(prev => prev.map(t =>
+                        t.id === task.id ? { ...t, is_completed: true } : t
+                      ))
+                      if (result.lv !== undefined) {
+                        setUserLevel(prev => ({
+                          ...prev,
+                          lv: result.lv,
+                          xp: result.xp,
+                          xp_in_level: result.xp_in_level ?? prev.xp_in_level,
+                          xp_for_level: result.xp_for_level ?? prev.xp_for_level,
+                        }))
+                      }
+                    }}
+                  >
+                    {task.is_completed ? "✓" : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -24,4 +24,5 @@ urlpatterns = [
     path('api/onboarding/', include('users.onboarding_urls')),
     path('api/songs/', include('users.songs_urls')),
     path('api/playlists/', include('users.playlists_urls')),
+    path('api/challenge/', include('users.challenge_urls')),
 ]

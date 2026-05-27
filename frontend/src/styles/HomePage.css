@@ -1741,108 +1741,69 @@ input:focus {
 }
 
 .burger-crown {
-  font-size: 74px;
-  line-height: 1;
-  margin-bottom: -6px;
+  width: 90px;
+  margin-bottom: -14px;
+  z-index: 2;
+  position: relative;
 }
 
-/* 頂部麵包胚（有芝麻）*/
+/* 頂部麵包胚 + 芝麻（疊層）*/
+.burger-top-bun-wrap {
+  position: relative;
+  width: 336px;
+  line-height: 0;
+}
+
 .burger-top-bun {
   width: 336px;
-  height: 108px;
-  background: linear-gradient(160deg, #e8954c 0%, #c87234 100%);
-  border-radius: 50% 50% 10% 10% / 70% 70% 20% 20%;
-  position: relative;
-  box-shadow: inset 0 -6px 0 rgba(0, 0, 0, 0.1);
+  display: block;
 }
 
-/* 芝麻點 */
-.sesame-dot {
+.burger-sesame-on-bun {
   position: absolute;
-  width: 24px;
-  height: 12px;
-  background: #f5d89a;
-  border-radius: 50%;
+  width: 55%;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
 /* LV1：芝麻粒堆 */
 .burger-sesame-pile {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
-  width: 264px;
-  padding: 29px 24px;
+  width: 220px;
+  display: block;
+  padding: 10px 16px;
   background: var(--pink-light);
   border: 3px dashed var(--pink-border);
   border-radius: 20px;
 }
 
-.sesame-pile-seed {
-  width: 26px;
-  height: 13px;
-  background: #f5d89a;
-  border-radius: 50%;
-  transform: rotate(calc(var(--i, 0) * 37deg));
-}
-
 /* 生菜葉 */
 .burger-lettuce {
   width: 370px;
-  height: 31px;
-  background: #66bb6a;
-  margin: -1px 0;
-  clip-path: polygon(
-    0% 100%, 0% 55%, 3% 20%, 6% 55%, 9% 20%,
-    12% 55%, 15% 20%, 18% 55%, 21% 20%, 24% 55%,
-    27% 20%, 30% 55%, 33% 20%, 36% 55%, 39% 20%,
-    42% 55%, 45% 20%, 48% 55%, 51% 20%, 54% 55%,
-    57% 20%, 60% 55%, 63% 20%, 66% 55%, 69% 20%,
-    72% 55%, 75% 20%, 78% 55%, 81% 20%, 84% 55%,
-    87% 20%, 90% 55%, 93% 20%, 96% 55%, 99% 20%,
-    100% 55%, 100% 100%
-  );
+  display: block;
+  margin-top: -32px;
 }
 
 /* 煎雞蛋 */
 .burger-egg {
   width: 294px;
-  height: 70px;
-  background: #fffde7;
-  border-radius: 50%;
-  position: relative;
-  margin: -1px 0;
-  box-shadow: 0 2px 0 #e8e8c0;
-}
-
-.burger-egg-yolk {
-  position: absolute;
-  width: 46px;
-  height: 46px;
-  background: #ffc107;
-  border-radius: 50%;
-  top: 12px;
-  left: calc(50% - 23px);
-  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.35);
+  display: block;
+  margin-top: -28px;
 }
 
 /* 大雞排 */
 .burger-chicken {
   width: 318px;
-  height: 62px;
-  background: linear-gradient(160deg, #ca8040 0%, #a86230 100%);
-  border-radius: 14px;
-  margin: -1px 0;
-  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.12);
+  display: block;
+  margin-top: -18px;
 }
 
 /* 底部麵包胚 */
 .burger-bottom-bun {
   width: 336px;
-  height: 62px;
-  background: linear-gradient(180deg, #d4884c 0%, #b8682e 100%);
-  border-radius: 0 0 40% 40% / 0 0 60% 60%;
-  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.08);
+  display: block;
+  margin-top: -18px;
 }
 
 /* XP 進度 */
@@ -1993,4 +1954,75 @@ input:focus {
 .challenge-task-check.checked {
   border-color: #4caf50;
   color: #4caf50;
+}
+
+/* ══════════════════════════════════════════
+   Challenge 完成 Toast
+   ══════════════════════════════════════════ */
+.challenge-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  z-index: 10000;
+  background: #7b71e1;
+  border: 3px solid #5f55c8;
+  color: white;
+  padding: 14px 22px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 6px 24px rgba(123, 113, 225, 0.45);
+  min-width: 320px;
+  max-width: 520px;
+  animation: toast-slide-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.challenge-toast.hiding {
+  animation: toast-slide-out 0.38s cubic-bezier(0.64, 0, 0.78, 0) forwards;
+}
+
+@keyframes toast-slide-in {
+  from { transform: translateX(-50%) translateY(-130%); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}
+
+@keyframes toast-slide-out {
+  from { transform: translateX(-50%) translateY(0);    opacity: 1; }
+  to   { transform: translateX(-50%) translateY(-130%); opacity: 0; }
+}
+
+.challenge-toast-check {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  background: white;
+  border: 3px solid #4caf50;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4caf50;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.challenge-toast-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.challenge-toast-label {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.82;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.challenge-toast-desc {
+  font-size: 15px;
+  font-weight: 700;
 }
