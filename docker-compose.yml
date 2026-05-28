@@ -10,6 +10,7 @@ services:
     volumes:
       - ./backend:/app  
       - /app/.venv
+      - ./data:/data
       - ./recommender/artifacts:/app/recommender_artifacts:ro
     command: >
       sh -c "uv run python manage.py migrate &&
@@ -35,7 +36,7 @@ services:
     container_name: music_recommender
     volumes:
       - ./recommender:/app
-      - ./data:/app/data
+      - ./data:/data
     env_file:
       - .env
     tty: true
