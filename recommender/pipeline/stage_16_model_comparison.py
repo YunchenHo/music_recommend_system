@@ -52,6 +52,55 @@ def _load_itemknn_wide(path: Path) -> pd.DataFrame | None:
     return pd.DataFrame(rows)
 
 
+def _load_lightfm_greedy(path: Path) -> pd.DataFrame | None:
+    """lightfm_greedy_metrics.csv (stage_17 coordinate-descent search).
+
+    Only the FINAL chosen config evaluated on the held-out TEST set is comparable
+    across models — that is the selection-bias-free estimate (the val rows were
+    used to pick the config, so they are optimistically biased). Keeps one row per
+    (variant, K) from the most recent run, with the chosen config summarized in Notes.
+    """
+    if not path.exists():
+        print(f"[compare] skip (missing): {path}")
+        return None
+    df = pd.read_csv(path)
+    needed = {"phase", "eval_on", "Model", "K", "Recall", "Precision", "NDCG"}
+    if not needed.issubset(df.columns):
+        print(f"[compare] skip (unexpected schema): {path}")
+        return None
+
+    fin = df[(df["phase"] == "final") & (df["eval_on"] == "test")].copy()
+    if fin.empty:
+        print(f"[compare] skip (no final/test rows yet): {path}")
+        return None
+
+    # Keep only the latest run per model (variant).
+    if "Date" in fin.columns:
+        fin["Date"] = fin["Date"].astype(str)
+        latest = fin.groupby("Model")["Date"].transform("max")
+        fin = fin[fin["Date"] == latest]
+
+    cfg_cols = [
+        "loss", "no_components", "learning_rate",
+        "max_sampled", "epochs", "item_alpha", "user_alpha",
+    ]
+    rows = []
+    for _, r in fin.iterrows():
+        cfg = ", ".join(f"{c}={r[c]}" for c in cfg_cols if c in fin.columns)
+        rows.append(
+            {
+                "Date": r.get("Date"),
+                "Model": r.get("Model"),
+                "K": int(r["K"]),
+                "Recall": r["Recall"],
+                "Precision": r["Precision"],
+                "NDCG": r["NDCG"],
+                "Notes": f"greedy best (test): {cfg}",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def _load_popularity(path: Path) -> pd.DataFrame | None:
     """popularity_baseline.csv has columns Model, Recall@K, K.
 
@@ -88,6 +137,8 @@ def main() -> int:
                         default=paths.reports / "popularity_baseline.csv")
     parser.add_argument("--lightfm-path", type=Path,
                         default=paths.reports / "lightfm_metrics.csv")
+    parser.add_argument("--lightfm-greedy-path", type=Path,
+                        default=paths.reports / "lightfm_greedy_metrics.csv")
     parser.add_argument("--out-path", type=Path,
                         default=paths.reports / "model_comparison.csv")
     args = parser.parse_args()
@@ -109,6 +160,10 @@ def main() -> int:
     lightfm_df = _load_long_metrics(args.lightfm_path)
     if lightfm_df is not None:
         frames.append(lightfm_df)
+
+    greedy_df = _load_lightfm_greedy(args.lightfm_greedy_path)
+    if greedy_df is not None:
+        frames.append(greedy_df)
 
     if not frames:
         raise SystemExit("[compare] no metrics files found; nothing to aggregate.")

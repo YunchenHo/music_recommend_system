@@ -18,6 +18,7 @@ class LightFMData:
     df_test: pd.DataFrame
     num_users: int
     num_items: int
+    df_val: pd.DataFrame | None = None
 
 
 def filter_top_users_by_activity(
@@ -86,6 +87,62 @@ def loo_split(
     df_train = df_train.sample(frac=1, random_state=seed).reset_index(drop=True)
 
     return df_train, df_test, useridx, itemidx
+
+
+def train_val_test_split(
+    train_encoded: pd.DataFrame,
+    min_pos_per_user: int = 3,
+    seed: int = 42,
+    max_users: int | None = None,
+    sample_rate: float | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict, dict]:
+    """Leave-two-out split for honest hyperparameter search.
+
+    Mirrors `loo_split` exactly, but holds out the last TWO positives per user:
+    after a deterministic shuffle, the first goes to validation and the second
+    to test. Greedy/grid search must select on validation only; test is touched
+    once at the very end. Both val and test are excluded from training, so a
+    single trained model can be scored against either.
+
+    `min_pos_per_user` is clamped to >=3 (2 held-out + at least 1 train positive).
+    Returns (df_train, df_val, df_test, useridx, itemidx).
+    """
+    min_pos = max(min_pos_per_user, 3)
+
+    df_pos = train_encoded[train_encoded["target"] == 1].copy()
+    user_counts = df_pos.groupby("msno_id").size()
+    valid_users = user_counts[user_counts >= min_pos].index
+
+    if max_users is not None:
+        valid_users = valid_users[:max_users]
+
+    df_filtered = train_encoded[train_encoded["msno_id"].isin(valid_users)].copy()
+    if sample_rate is not None and 0 < sample_rate < 1:
+        df_filtered = df_filtered.sample(frac=sample_rate, random_state=seed).copy()
+
+    unique_users = df_filtered["msno_id"].unique()
+    useridx = {old_id: new_id for new_id, old_id in enumerate(unique_users)}
+
+    unique_songs = df_filtered["song_id"].unique()
+    itemidx = {old_id: new_id for new_id, old_id in enumerate(unique_songs)}
+
+    df_filtered["msno_idx"] = df_filtered["msno_id"].map(useridx)
+    df_filtered["song_idx"] = df_filtered["song_id"].map(itemidx)
+
+    df_positives = df_filtered[df_filtered["target"] == 1].copy()
+    df_positives = df_positives.sample(frac=1, random_state=seed).sort_values("msno_idx")
+
+    # Last two positives per user: cumcount from the tail picks them deterministically.
+    tail_rank = df_positives.groupby("msno_idx").cumcount(ascending=False)
+    val_indices = df_positives[tail_rank == 1].index   # second-to-last -> validation
+    test_indices = df_positives[tail_rank == 0].index  # last           -> test
+
+    df_val = df_positives.loc[val_indices].copy()
+    df_test = df_positives.loc[test_indices].copy()
+    df_train = df_filtered.drop(val_indices.union(test_indices)).copy()
+    df_train = df_train.sample(frac=1, random_state=seed).reset_index(drop=True)
+
+    return df_train, df_val, df_test, useridx, itemidx
 
 
 def _bucket_quantile(s: pd.Series, n_buckets: int = 5, prefix: str = "b") -> pd.Series:
@@ -183,22 +240,38 @@ def prepare_lightfm_dataset(
     sample_rate: float | None = None,
     top_k_cities: int = 30,
     top_k_artists: int = 5000,
+    three_way: bool = False,
 ) -> LightFMData:
     """Build a LightFM Dataset + interactions + (optional) feature matrices.
 
     `members` and `songs` are required when `use_features=True`. The interactions
-    matrix is built from the LOO split's train portion (positives only). Test
-    interactions are returned separately in `df_test` for downstream evaluation.
+    matrix is built from the split's train portion (positives only). Held-out
+    interactions are returned separately for downstream evaluation.
+
+    When `three_way=False` (default), a leave-one-out split is used and only
+    `df_test` is populated. When `three_way=True`, a leave-two-out split is used
+    and `df_val` is also populated, enabling honest hyperparameter search
+    (select on val, report final on the untouched test).
     """
     from lightfm.data import Dataset
 
-    df_train, df_test, useridx, itemidx = loo_split(
-        train_encoded,
-        min_pos_per_user=min_pos_per_user,
-        seed=seed,
-        max_users=max_users,
-        sample_rate=sample_rate,
-    )
+    df_val = None
+    if three_way:
+        df_train, df_val, df_test, useridx, itemidx = train_val_test_split(
+            train_encoded,
+            min_pos_per_user=min_pos_per_user,
+            seed=seed,
+            max_users=max_users,
+            sample_rate=sample_rate,
+        )
+    else:
+        df_train, df_test, useridx, itemidx = loo_split(
+            train_encoded,
+            min_pos_per_user=min_pos_per_user,
+            seed=seed,
+            max_users=max_users,
+            sample_rate=sample_rate,
+        )
 
     user_ids = list(useridx.values())
     item_ids = list(itemidx.values())
@@ -266,6 +339,7 @@ def prepare_lightfm_dataset(
         item_features=item_features,
         df_train=df_train,
         df_test=df_test,
+        df_val=df_val,
         num_users=len(user_ids),
         num_items=len(item_ids),
     )
@@ -314,15 +388,23 @@ def evaluate_lightfm(
     eval_ks: tuple[int, ...] = (10, 20),
     num_threads: int = 4,
     batch_size: int = 500,
+    eval_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Top-K recommendation evaluation matching evaluate_mf_with_faiss schema.
 
-    For each test user: score all items, mask out items already seen in train,
-    take top-max(eval_ks), record hit + NDCG gain.
+    For each held-out user: score all items, mask out items already seen in
+    train, take top-max(eval_ks), record hit + NDCG gain.
     Output columns: Model, K, Recall, Precision, NDCG (long format).
+
+    `eval_df` selects the held-out ground-truth set (one positive per user).
+    Defaults to `data.df_test` (backward compatible); pass `data.df_val` to
+    score against validation during hyperparameter search.
     """
     import math
     from tqdm import tqdm
+
+    if eval_df is None:
+        eval_df = data.df_test
 
     n_items = data.num_items
     all_items = np.arange(n_items, dtype=np.int32)
@@ -332,7 +414,7 @@ def evaluate_lightfm(
         train_pos.groupby("msno_idx")["song_idx"].apply(set).to_dict()
     )
     test_ground_truth: dict[int, list[int]] = (
-        data.df_test.groupby("msno_idx")["song_idx"].apply(list).to_dict()
+        eval_df.groupby("msno_idx")["song_idx"].apply(list).to_dict()
     )
     train_known_items = set(train_pos["song_idx"].unique().tolist())
 
@@ -358,7 +440,10 @@ def evaluate_lightfm(
                 num_threads=num_threads,
             )
 
-            seen = train_history.get(uid, set())
+            # Never mask the item currently being scored: harmless for val/test
+            # (held-out items are absent from train history) and required for an
+            # eval_on=train overfitting check (the target IS a train item there).
+            seen = train_history.get(uid, set()) - {test_item}
             if seen:
                 seen_arr = np.fromiter(seen, dtype=np.int32, count=len(seen))
                 scores[seen_arr] = -np.inf

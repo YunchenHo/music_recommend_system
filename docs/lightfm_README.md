@@ -32,11 +32,12 @@ ItemKNN / MF / Popularity / LightFM 所有 stages 都在這個 venv 跑。
 
 ```
 recommender/
-├── src/models/lightfm_model.py          # 核心：LOO split、特徵建構、train、evaluate
+├── src/models/lightfm_model.py          # 核心：LOO / 三切、特徵建構、train、evaluate
 ├── pipeline/
 │   ├── stage_14_lightfm_train.py        # 訓練
 │   ├── stage_15_lightfm_eval.py         # 評估（append CSV）
-│   └── stage_16_model_comparison.py     # 匯總比較
+│   ├── stage_16_model_comparison.py     # 匯總比較
+│   └── stage_17_lightfm_greedy.py       # greedy 調參（三切 train/val/test）
 ├── data/processed/
 │   ├── train_encoded.parquet            # 【輸入】互動資料 (msno_id, song_id, target)
 │   ├── complete_members.parquet         # 【輸入】user 特徵
@@ -48,8 +49,9 @@ recommender/
 │   └── lightfm_dataset.pkl              # stage_14 產出：Dataset + features 矩陣
 └── reports/
     ├── lightfm_metrics.csv              # stage_15 累積寫入（Date/Model/K/Recall/.../Notes）
+    ├── lightfm_greedy_metrics.csv       # stage_17 累積寫入（greedy 搜尋 + final val/test/train）
     ├── lightfm_run.log                  # 手動 tee 的訓練 log
-    └── model_comparison.csv             # stage_16 產出：四模型匯總
+    └── model_comparison.csv             # stage_16 產出：各模型匯總
 ```
 
 ### 輸入資料前置條件
@@ -198,7 +200,101 @@ tmux ls                          # 列現有 session
 
 ---
 
-## 5. 模型比較：`stage_16_model_comparison.py`
+## 5. 自動超參數搜尋（greedy / 三切）：`stage_17_lightfm_greedy.py`
+
+§2~§4 是「手動一次調一個參數、跑完寫 `--notes`」的流程。`stage_17` 把它自動化成
+**coordinate-descent（greedy）搜尋**，並把資料切分升級成 **train / val / test 三切**，
+自動找出 hybrid 與 pureCF 各自的最佳超參數組合。
+
+### 5.1 為什麼要三切（train / val / test）
+
+只要你開始「搜尋」超參數，就會把評估集拿來「選模型」——挑「在某集合上分數最高」的那組參數，
+那個最高分就**不再是公正的泛化估計**（含了對該集合的過度配適 / selection bias）。資料固定、
+反覆用同一份集合調參會讓偏差更嚴重，不是更輕。
+
+所以 stage_17 三切：
+- **train**：建訓練 interactions。
+- **val**：greedy 全程只看 val 選參數。
+- **test**：從頭到尾不參與選擇，只在最後對選定 config 報一次 —— 這才是能跨模型比較的公正數字。
+
+切分用 leave-two-out（每 user 留 2 個正樣本，1 給 val、1 給 test；
+`src/models/lightfm_model.py:train_val_test_split`）。同一個訓練好的模型可同時對 val 與 test
+評估（兩者都是 held-out、訓練資料不變，比較才公正）。`--min-pos-per-user` 自動夾到 ≥3。
+
+> 對照：§3 的 stage_15 走的是二切 LOO（每 user 留 1 個當 test），適合「手動單組設定、直接看 test」；
+> 一旦要**搜尋**多組設定，就該用 stage_17 的三切，避免拿 test 調參。
+
+### 5.2 搜尋策略（coordinate descent）
+
+固定維度順序（影響大者在前、正則化在後），每個維度其餘參數固定在「目前最佳」，只掃該維度候選，
+用 val 上的 `--select-metric` 取最佳後鎖定，再進下一維度：
+
+```
+loss → no_components → learning_rate → max_sampled → epochs → item_alpha → user_alpha
+```
+
+- **加法成本**：每變體約 28 次訓練（對照完整 grid 的 ~1.5 萬次乘法成本不可行）。
+- `max_sampled` 只對 WARP 有效；若當前最佳 loss 非 `warp`/`warp-kos` 會自動跳過。
+- **限制**：greedy 找的是好的「局部最佳」，不保證全域最佳，且結果受維度順序影響。需要更嚴謹就改跑完整 grid 或多 seed。
+
+### 5.3 執行
+
+```bash
+# Smoke（小 cohort + 迷你候選，數分鐘，驗證跑得通）
+PYTHONPATH=. python -m pipeline.stage_17_lightfm_greedy --variant both --smoke
+
+# 全量（本機 tmux；LightFM 純 Python，可本機全量跑，禁止的是 TensorFlow）
+tmux new -s lightfm_greedy
+PYTHONPATH=. python -m pipeline.stage_17_lightfm_greedy --variant both --num-threads 1 \
+  2>&1 | tee reports/lightfm_greedy_run.log
+# Ctrl-B 然後 d 離開；tmux attach -t lightfm_greedy 回來
+```
+
+### 5.4 全部 CLI flag
+
+| Flag | 預設 | 說明 |
+|---|---|---|
+| `--variant` | both | `hybrid`（含特徵）/ `purecf`（無特徵）/ `both` |
+| `--loss-list` | `warp,bpr,logistic` | loss 候選 |
+| `--components-list` | `32,64,128,256` | embedding 維度候選 |
+| `--lr-list` | `0.01,0.025,0.05,0.1` | 學習率候選 |
+| `--max-sampled-list` | `5,10,30,50` | WARP negative 採樣候選 |
+| `--epochs-list` | `5,10,20,30,50` | epoch 候選 |
+| `--item-alpha-list` | `0,1e-7,1e-6,1e-5` | item L2 候選 |
+| `--user-alpha-list` | `0,1e-7,1e-6,1e-5` | user L2 候選 |
+| `--select-metric` | `NDCG@20` | 選最佳用的指標（`<metric>@<K>`） |
+| `--eval-ks` | `10,20` | 評估 K（會自動補進 select 的 K） |
+| `--top-k-members` | 5000 | 同 stage_14；設 0 關閉 |
+| `--min-pos-per-user` | 3 | 三切需 ≥3，會自動夾 |
+| `--max-users` | None | smoke / 限縮 cohort 用 |
+| `--num-threads` | 4 | **本機設 1**（no-openmp build） |
+| `--seed` | 42 | 隨機種子 |
+| `--out-csv` | `reports/lightfm_greedy_metrics.csv` | append 目標 |
+| `--smoke` | off | 迷你候選 + 小 cohort |
+
+### 5.5 輸出與判讀
+
+append 寫入 `reports/lightfm_greedy_metrics.csv`（20 欄）：
+
+`Date, variant, phase, eval_on, no_components, loss, learning_rate, max_sampled, epochs,
+item_alpha, user_alpha, Model, K, Recall, Precision, NDCG, Users_evaluated,
+select_metric, select_value, is_best`
+
+- `phase`：`tune:<維度>`（搜尋中）或 `final`（最終選定的 config）。
+- `eval_on`：`val`（搜尋全程）；`test` 與 `train` 只在 `final` 出現。
+- `is_best`：該調參維度內的贏家。
+- **過擬合判讀**：比較 `phase=final` 的 `eval_on=train` vs `eval_on=test` 的 NDCG@20 落差，
+  差越大越過擬合（程式會直接印出 `gap=`）；`tune:epochs` 各列的 val 分數若「升到頂後下降」即 early-stopping 轉折。
+
+跑完 stage_17 後直接跑 stage_16（見 §6），它會自動抓 **final/test** 的列（每個 variant 取最新一次 run）
+放進跨模型比較表 —— 用的是沒有 selection bias 的 test 數字。
+
+> §9 / §11 是 2026-05-16 單 seed、手動逐步調參得到的「已驗證」紀錄；stage_17 則是把這套調參自動化、
+> 並加上三切的公正評估。兩者可互相對照。
+
+---
+
+## 6. 模型比較：`stage_16_model_comparison.py`
 
 讀取所有 `reports/*_metrics.csv` 匯總成單一比較表：
 
@@ -215,13 +311,19 @@ python -m pipeline.stage_16_model_comparison \
 - `reports/itemknn_grid_metrics.csv`（沒有就 skip）
 - `reports/mf_faiss_metrics.csv`（沒有就 skip）
 - `reports/popularity_baseline.csv`（沒有就 skip）
-- `reports/lightfm_metrics.csv`（沒有就 skip）
+- `reports/lightfm_metrics.csv`（stage_15；沒有就 skip）
+- `reports/lightfm_greedy_metrics.csv`（stage_17；沒有就 skip）
 
-⚠️ 目前會抓 LightFM CSV 的**全部 row**，累積多次後比較表會有重複的 LightFM 列。要乾淨比較的話手動篩過 CSV，或之後加 `--lightfm-date` flag 來指定某次紀錄。
+**stage_17 的 greedy 結果怎麼進比較表**：只取 `phase=final` 且 `eval_on=test` 的列（每個 variant
+取最新一次 run），並把選定的 config 摘要寫進 Notes。用 test（而非調參用的 val）才是公正、可跨模型比較的數字。
+
+⚠️ 注意：**手動的 `lightfm_metrics.csv`（stage_15）仍會抓全部 row**，累積多次後比較表會有重複的
+LightFM 列；要乾淨比較就手動篩過該 CSV。stage_17 的 `lightfm_greedy_metrics.csv` 沒有這問題
+（已自動篩 final/test + 最新 run）。
 
 ---
 
-## 6. 查看與維護 `lightfm_metrics.csv`
+## 7. 查看與維護 `lightfm_metrics.csv`
 
 ```bash
 # 表格化檢視
@@ -243,7 +345,7 @@ Excel / Numbers / VSCode 開 CSV 也可以直接編輯刪行。
 
 ---
 
-## 7. 重要產出檔大小參考
+## 8. 重要產出檔大小參考
 
 | 檔案 | 約略大小 | 由誰產生 |
 |---|---|---|
@@ -256,11 +358,11 @@ Excel / Numbers / VSCode 開 CSV 也可以直接編輯刪行。
 
 ---
 
-## 8. 觀察到的數據（記錄）
+## 9. 觀察到的數據（記錄）
 
 實驗於 2026-05-16 完成，單 seed=42、Apple M-series + single-threaded（lightfm no-openmp）。
 
-### 8.1 LightFM 調參演進（K=10）
+### 9.1 LightFM 調參演進（K=10）
 
 | # | 設定 | Recall@10 | Recall@20 | NDCG@10 | NDCG@20 | 該步 ΔR@10 | 累計 |
 |---|---|---|---|---|---|---|---|
@@ -279,7 +381,7 @@ Excel / Numbers / VSCode 開 CSV 也可以直接編輯刪行。
 4. **Embedding dim 仍可繼續擴**（第 5→6 步 +8%）。c128→c256 還有改善，c512 可能也有（未驗證）。
 5. **邊際效益遞減**：ms10→ms30 (+32%) 大於 ms30→ms50 (+13%) 大於 c128→c256 (+8%)。
 
-### 8.2 三模型 head-to-head（top-5000 user）
+### 9.2 三模型 head-to-head（top-5000 user）
 
 | 模型 | 最佳設定 | Recall@10 | Recall@20 | NDCG@10 | NDCG@20 | 訓練時間 |
 |---|---|---|---|---|---|---|
@@ -288,7 +390,7 @@ Excel / Numbers / VSCode 開 CSV 也可以直接編輯刪行。
 | 🥉 Popularity | top-K=20 | 0.0432 | 0.0714 | — | — | <1s |
 | **LightFM vs ItemKNN** | | **+20%** | **+20%** | **+21%** | **+21%** | |
 
-### 8.3 ItemKNN grid（item_k ∈ {5, 10, 20}, sim_threshold=0, baseline aggregation）
+### 9.3 ItemKNN grid（item_k ∈ {5, 10, 20}, sim_threshold=0, baseline aggregation）
 
 | Item_K | Recall@10 | Recall@20 | NDCG@10 | NDCG@20 |
 |---|---|---|---|---|
@@ -298,7 +400,7 @@ Excel / Numbers / VSCode 開 CSV 也可以直接編輯刪行。
 
 ItemKNN 的 sweet spot 在 k=5~10，再多鄰居反而稀釋。整個 grid 變動幅度只有 ~1%，**ItemKNN 的調參天花板很快觸頂**。
 
-### 8.4 訓練時間參考（M-series + single-thread）
+### 9.4 訓練時間參考（M-series + single-thread）
 
 | 設定 | 訓練 | 評估 |
 |---|---|---|
@@ -311,7 +413,7 @@ ItemKNN 的 sweet spot 在 k=5~10，再多鄰居反而稀釋。整個 grid 變�
 
 純 CF 比 hybrid 快約 2 倍（無 feature matrix 乘積）；`max_sampled` 倍增約使每 epoch 慢 1.5-2 倍；`components` 倍增約使每 epoch 慢 1.7 倍。
 
-### 8.5 已知局限（口試準備）
+### 9.5 已知局限（口試準備）
 
 - **單 seed 跑一次**：未做多 seed 重複實驗，每步 +13~32% 的提升幅度遠大於合理的 seed 變動（~±2-3%），但嚴格的 statistical significance 需 bootstrap CI。
 - **LOO 切分**：每 user 最後 1 個正樣本當 test，未用 time-based split（資料無 timestamp）。
@@ -321,7 +423,7 @@ ItemKNN 的 sweet spot 在 k=5~10，再多鄰居反而稀釋。整個 grid 變�
 
 ---
 
-## 9. 常見 troubleshoot
+## 10. 常見 troubleshoot
 
 | 症狀 | 原因 / 解法 |
 |---|---|
@@ -335,7 +437,7 @@ ItemKNN 的 sweet spot 在 k=5~10，再多鄰居反而稀釋。整個 grid 變�
 
 ---
 
-## 10. 重要參數調整建議（**已驗證**，按實測影響大小排序）
+## 11. 重要參數調整建議（**已驗證**，按實測影響大小排序）
 
 | 優先 | 參數 | 預期 ΔR@10 | 訓練成本 | 適用場景 |
 |---|---|---|---|---|
