@@ -321,6 +321,27 @@ python -m pipeline.stage_16_model_comparison \
 LightFM 列；要乾淨比較就手動篩過該 CSV。stage_17 的 `lightfm_greedy_metrics.csv` 沒有這問題
 （已自動篩 final/test + 最新 run）。
 
+### 6.1 跨模型比較的 cohort 說明（刻意不同，非 bug）
+
+`model_comparison.csv` 裡各模型用的**使用者數刻意不同**，這是 by-design，不是疏漏：
+
+- **LightFM（greedy）= 全量（~11.5k users）**：低活躍使用者的少量互動對 MF / 協同嵌入**仍是有用訊號**，
+  會參與 item embedding 的共現學習 → 全量才是 LightFM 的合理設定。
+  （§9.1 實測佐證：top-K 過濾讓 LightFM 失血 **+22%**。）
+- **ItemKNN / Popularity = top-5000（實際 ~4776）**：低活躍使用者的共現太稀疏、不可靠，灌進去會
+  **稀釋 item-item 相似度、變成雜訊** → top-K 活躍用戶才是相似度法的合理設定。
+  （§9.3 佐證：ItemKNN sweet spot 在 k=5~10。）
+
+因此這張表的正確定位是「**各模型在各自最適資料規模下的最佳表現**」，而非「同一 cohort 的 head-to-head」。
+這是文獻中常見的框架，而且本專案的 §9 實驗正好支持這個選擇。
+
+補充（對 LightFM 偏保守）：LightFM 是在**更難、更廣**的評估 pool（含大量低活躍、難預測的 user）上算分，
+ItemKNN 則是在**較好猜的活躍用戶子集**上算分；即便如此 LightFM 的 NDCG@20=0.0960 仍 > ItemKNN 0.0923，
+代表這個領先是**保守估計**、不是被 cohort 灌水。
+
+> 口試 / 報告務必明寫「cohort 差異是刻意的」並附上上述理由，避免讀者誤判為同 cohort 比較。
+> 相關彙整見 `reports/lightfm_greedy_summary.csv`（公平對照 + WARP 延伸探索）。
+
 ---
 
 ## 7. 查看與維護 `lightfm_metrics.csv`
