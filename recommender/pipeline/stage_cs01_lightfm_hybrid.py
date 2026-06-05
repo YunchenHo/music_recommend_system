@@ -71,6 +71,8 @@ def evaluate_split(
     loss: str,
     max_sampled: int,
     eval_ks: tuple[int, ...],
+    item_alpha: float = 0.0,
+    user_alpha: float = 0.0,
 ) -> pd.DataFrame:
     max_k = max(eval_ks)
 
@@ -92,6 +94,8 @@ def evaluate_split(
         learning_rate=learning_rate,
         epochs=epochs,
         max_sampled=max_sampled,
+        item_alpha=item_alpha,
+        user_alpha=user_alpha,
         num_threads=1,  # single-thread LightFM (compiled without OpenMP)
         verbose=False,
     )
@@ -119,7 +123,8 @@ def evaluate_split(
         model_name="LightFM-hybrid",
         notes=(
             f"split={split}, components={no_components}, epochs={epochs}, "
-            f"loss={loss}, max_sampled={max_sampled}"
+            f"loss={loss}, max_sampled={max_sampled}, "
+            f"item_alpha={item_alpha}, user_alpha={user_alpha}"
         ),
     )
 
@@ -145,6 +150,10 @@ def main() -> int:
     parser.add_argument("--learning-rate", type=float, default=0.05)
     parser.add_argument("--loss", default="warp", choices=["warp", "bpr", "logistic", "warp-kos"])
     parser.add_argument("--max-sampled", type=int, default=10)
+    parser.add_argument("--item-alpha", type=float, default=0.0,
+                        help="L2 reg on item embeddings (抑制冷啟動過擬合；greedy hybrid 最佳=1e-7)")
+    parser.add_argument("--user-alpha", type=float, default=0.0,
+                        help="L2 reg on user embeddings (greedy hybrid 最佳=1e-6)")
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args()
 
@@ -190,6 +199,8 @@ def main() -> int:
             learning_rate=args.learning_rate,
             loss=args.loss,
             max_sampled=args.max_sampled,
+            item_alpha=args.item_alpha,
+            user_alpha=args.user_alpha,
             eval_ks=eval_ks,
         )
         print(df_metrics[["Model", "K", "Recall", "Precision", "NDCG", "Users_evaluated", "Notes"]].to_string(index=False))

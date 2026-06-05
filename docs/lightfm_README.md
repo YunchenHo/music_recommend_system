@@ -479,3 +479,59 @@ python -m pipeline.stage_14_lightfm_train \
 → Recall@10 = 0.1625, Recall@20 = 0.2249
 
 **規則**：每次只改一個變因、跑完寫進 `--notes`，這樣 `lightfm_metrics.csv` 才能當實驗紀錄查。
+
+---
+
+## 12. 冷啟動（cold-start）與「超參數情境特定性」
+
+冷啟動評估走另一條 stage：`stage_cs01_lightfm_hybrid`（含特徵）、`stage_cs02_lightfm_purecf`
+（無特徵）、`stage_cs05_compare`（跨模型彙整），切分為 `A_N1 / A_N3 / A_N5`（warm 用戶但只留
+1/3/5 個正樣本）與 `C`（完全沒看過的新用戶）。`cs01` 已支援 `--item-alpha / --user-alpha`。
+
+### 12.1 把 warm 最佳 config 搬到冷啟動 → 全面變差（負面結果，已驗證）
+
+用 §5 greedy 在 **warm-user 全量**選出的 hybrid 最佳組合
+（`warp, c256, lr0.1, ms50, e50, item_α=1e-7, user_α=1e-6`）重跑冷啟動，對照原本保守的
+`ms10/e10/c128`：
+
+| split | 新 greedy NDCG@20 | 舊 保守 NDCG@20 | Δ |
+|---|---|---|---|
+| A_N1（最稀疏） | 0.206 | 0.347 | **−0.141** |
+| A_N3 | 0.267 | 0.387 | −0.120 |
+| A_N5 | 0.305 | 0.391 | −0.086 |
+| C（新用戶） | 0.395 | 0.395 | ~0 |
+
+**結論**：warm 調出來的高容量 config 在冷啟動**全面更差**，且**越稀疏的用戶傷得越重**
+（A_N1 −0.141 → A_N5 −0.086）。原因：c256/e50/lr0.1 是「每人資料多」時的最佳；冷啟動每人互動
+極少，這麼大的模型 + 激進學習率會過擬合。Scenario C 幾乎平手，因為新用戶靠「特徵 + fit_partial」
+冷推論，與學到的 per-user embedding 容量無關。
+
+→ **超參數不跨資料情境通用**：warm 最佳 ≠ 冷啟動最佳。冷啟動請沿用保守 config，或另切冷啟動
+validation 重新調參（勿在冷啟動 test 上挑最佳，會重蹈 selection bias）。greedy config 的冷啟動
+結果另存於 `reports/cs_lightfm_hybrid_metrics_greedy.csv`，當「試過、更差」的紀錄。
+
+### 12.2 冷啟動跨模型比較（保守 config，NDCG@20）
+
+`stage_cs05_compare` 產出 `reports/cs_model_comparison.csv`：
+
+| Split | Popularity | LightFM-hybrid | LightFM-pureCF | ItemKNN |
+|---|---|---|---|---|
+| A_N1 | **0.389** | 0.347 | 0.294 | 0.000 |
+| A_N3 | **0.402** | 0.387 | 0.251 | 0.013 |
+| A_N5 | **0.401** | 0.391 | 0.315 | 0.018 |
+| C | **0.403** | 0.395 | —（做不到） | —（做不到） |
+
+冷啟動的故事幾乎是 warm 的**鏡像**：
+
+1. **Popularity 最強** —— 冷用戶沒歷史，推熱門就贏，是經典且合理的冷啟動結果。
+2. **LightFM-hybrid 第二，且是唯一（除 Popularity）能處理全新用戶 C 的模型**；pureCF / ItemKNN 在 C 都做不到。
+3. **冷啟動 hybrid > pureCF**（特徵有用），與 warm 的「pureCF 勝、特徵反而傷」完全相反 —— 特徵的價值在冷啟動才發揮。
+4. **ItemKNN 在冷啟動崩潰**（~0）：每人僅 1 個互動 → 沒鄰居可算相似度。
+
+⚠️ **指標尺度**：冷啟動 NDCG（~0.35–0.40）與 warm（~0.08–0.12）**不可直接比** —— 冷啟動每人
+ground-truth 只有 1/3/5 個，分母不同，只能在冷啟動表內互比。
+
+### 12.3 最終建議
+
+- **warm-user 線上推薦**：pureCF（無特徵）+ greedy 最佳 config（見 §5）。
+- **冷啟動 / 新用戶**：hybrid（含特徵）+ 保守 config；Popularity 是極強的 fallback baseline，值得保留。
