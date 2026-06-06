@@ -535,3 +535,67 @@ ground-truth 只有 1/3/5 個，分母不同，只能在冷啟動表內互比。
 
 - **warm-user 線上推薦**：pureCF（無特徵）+ greedy 最佳 config（見 §5）。
 - **冷啟動 / 新用戶**：hybrid（含特徵）+ 保守 config；Popularity 是極強的 fallback baseline，值得保留。
+
+---
+
+## 13. 切換門檻：pureCF ↔ hybrid 隨使用者活躍度 N（`stage_cs06_switch_threshold.py`）
+
+研究問題：切換式推薦系統若要「依使用者歷史筆數路由到 pureCF 或 hybrid」，**門檻該設在幾筆**？
+即兩變體的效能曲線在哪個活躍度交叉。
+
+### 13.1 方法（控制 A_N1/N3/N5 的兩個 confound）
+
+`stage_cs06` 掃 `N`（訓練可見的**正向**互動筆數），用 `make_split_a_fixed_holdout`
+（`src/coldstart/split.py`）建切分：
+
+- **固定留出 H=5** 筆當 test（不像 `make_split_a` 把所有非 seed 正樣本丟進 test）→ NDCG 尺度跨 N 可比。
+- 每位使用者**恰好** N 筆進 train、H 筆進 test、其餘丟棄 → N 是乾淨的自變數。
+- **自然母體**：每個 N 取「≥ N+H 正樣本」的人（母體隨 N 縮，對應部署：歷史 N 筆的人來自 ≥N 池）。
+- **兩變體用完全相同的 config** → 唯一差異是「特徵 on/off」+ N，是乾淨的特徵 × 活躍度消融。
+
+**N 的定義**：使用者「訓練時被模型看到」的正向互動筆數（不含負樣本）。H=5 純粹是評估量尺，
+**部署時不存在** —— 線上只看使用者實際筆數 N 路由，不需要 N+H。
+
+config（pureCF 與 hybrid 相同，刻意中庸、避開 greedy 高容量過擬合組）：
+`loss=warp, no_components=128, learning_rate=0.05, epochs=20, max_sampled=30, alpha=0`，seed=42。
+
+### 13.2 結果（NDCG@20 vs N；母體 8.7k–11.6k）
+
+| N | hybrid | pureCF | 贏家 | Δ(pureCF−hybrid) |
+|---|---|---|---|---|
+| 1 | 0.0359 | 0.0308 | **hybrid** | −0.0051 |
+| 2 | 0.0349 | 0.0241 | **hybrid** | −0.0107 |
+| 3 | 0.0379 | 0.0329 | **hybrid** | −0.0050 |
+| 5 | 0.0381 | 0.0374 | hybrid | −0.0007 |
+| 8 | 0.0405 | 0.0406 | ~平手 | +0.0001 |
+| 12 | 0.0424 | 0.0421 | ~平手 | −0.0003 |
+| 20 | 0.0420 | 0.0440 | **pureCF** | +0.0020 |
+| 30 | 0.0429 | 0.0449 | **pureCF** | +0.0020 |
+| 50 | 0.0454 | 0.0469 | **pureCF** | +0.0015 |
+
+NDCG@10 同型（hybrid 領到 N=12、pureCF 從 N=20 起穩定領先）。兩條曲線都隨 N 上升（歷史越多越好），協定一致、可信。
+
+### 13.3 結論：門檻是一段「轉換帶」，不是單一點
+
+- **N ≤ 3（很稀疏）**：hybrid 明確贏（Δ −0.005 ~ −0.011）→ 特徵在資料極少時最有用。
+- **N ≈ 5–12**：平手（Δ 在 ±0.001 內、N=8/12 來回翻 → 雜訊等級）。
+- **N ≥ 20（夠活躍）**：pureCF 穩定贏（Δ +0.0015 ~ +0.0020）→ 協同訊號夠了、特徵變輕微拖累。
+
+→ **切換路由建議**：歷史 **< ~5 筆用 hybrid、≥ ~20 筆用 pureCF**，中間（5–20）兩者幾乎沒差。
+
+### 13.4 限制（口試 / 報告務必寫）
+
+1. **轉換帶 Δ（~0.001–0.002）落在單一 seed 的雜訊內** → 精確門檻（N=12 還是 20）現在釘不死；
+   最可信的是「N≤3 hybrid 明顯贏、N≥20 pureCF 穩定贏」兩端。要釘死門檻需**多 seed 重跑取 mean±std**。
+2. **固定單一 config 的消融**，非各 N、各變體各自最佳調參（那是更貴的另一個實驗）。
+3. **截斷母體假設**：實驗的「N=3 使用者」其實是「本來 ≥8 筆、被截成 3 筆」的活躍用戶，
+   與「天生只有 3 筆」的真稀疏用戶不完全等價（離線冷啟動模擬通病）。模型看到的 N 筆相同，
+   故路由結論可轉移，但低 N 母體偏向「碰巧活躍」的人。
+
+### 13.5 重現
+
+```bash
+PYTHONPATH=. python -m pipeline.stage_cs06_switch_threshold --smoke   # 快速驗證
+PYTHONPATH=. python -m pipeline.stage_cs06_switch_threshold           # 全量（數小時，建議 tmux）
+# 輸出 reports/cs_switch_threshold.csv，並印出 winner-by-N crossover summary
+```

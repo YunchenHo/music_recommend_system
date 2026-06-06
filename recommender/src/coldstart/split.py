@@ -91,6 +91,70 @@ def make_split_a(
     return df_train, df_test, useridx, itemidx
 
 
+def make_split_a_fixed_holdout(
+    train_encoded: pd.DataFrame,
+    *,
+    n_seed: int,
+    n_holdout: int = 5,
+    seed: int = 42,
+    max_users: int | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict, dict]:
+    """Scenario A variant with a FIXED held-out test size, for the activity sweep.
+
+    Unlike `make_split_a` (which puts *all* non-seed positives into test, so the
+    test size shrinks as n_seed grows), this keeps EXACTLY `n_holdout` positives
+    per user in test and EXACTLY `n_seed` positives in train. Any extra positives
+    beyond `n_seed + n_holdout` are dropped. This isolates "training history
+    length = n_seed" as the only variable and keeps the NDCG/Recall scale
+    comparable across different n_seed values (the switching-threshold study).
+
+    Eligible users have >= n_seed + n_holdout positives ("natural population"
+    per n_seed: the population shrinks as n_seed grows, matching deployment —
+    a user with N interactions comes from the >=N pool). Negatives stay in train.
+
+    Returns (df_train, df_test, useridx, itemidx).
+    """
+    if n_seed < 1:
+        raise ValueError(f"n_seed must be >= 1, got {n_seed}")
+    if n_holdout < 1:
+        raise ValueError(f"n_holdout must be >= 1, got {n_holdout}")
+
+    df_pos = train_encoded[train_encoded["target"] == 1]
+    user_pos_counts = df_pos.groupby("msno_id").size()
+    eligible_users = user_pos_counts[user_pos_counts >= n_seed + n_holdout].index
+
+    if max_users is not None:
+        eligible_users = eligible_users[:max_users]
+
+    eligible_set = set(eligible_users)
+    df_filtered = train_encoded[train_encoded["msno_id"].isin(eligible_set)].copy()
+
+    unique_users = df_filtered["msno_id"].unique()
+    useridx = {old: new for new, old in enumerate(unique_users)}
+    unique_songs = df_filtered["song_id"].unique()
+    itemidx = {old: new for new, old in enumerate(unique_songs)}
+
+    df_filtered = _encode_ids(df_filtered, useridx, itemidx)
+
+    df_positives = df_filtered[df_filtered["target"] == 1].copy()
+    df_positives = (
+        df_positives.sample(frac=1, random_state=seed)
+        .sort_values("msno_idx")
+        .reset_index()
+    )
+
+    # Per-user ordering after shuffle: first H -> test, next N -> train seed, rest dropped.
+    rank = df_positives.groupby("msno_idx").cumcount()
+    holdout_idx = df_positives.loc[rank < n_holdout, "index"].tolist()
+    extra_idx = df_positives.loc[rank >= n_holdout + n_seed, "index"].tolist()
+
+    df_test = df_filtered.loc[holdout_idx].copy().reset_index(drop=True)
+    df_train = df_filtered.drop(holdout_idx + extra_idx).copy()
+    df_train = df_train.sample(frac=1, random_state=seed).reset_index(drop=True)
+
+    return df_train, df_test, useridx, itemidx
+
+
 def make_split_c(
     train_encoded: pd.DataFrame,
     *,
