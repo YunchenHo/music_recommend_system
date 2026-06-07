@@ -2,8 +2,8 @@ from pathlib import Path
 import pandas as pd
 
 SCRIPT_DIR = Path(__file__).parent          # recommender/scripts/
-RECOMMENDER_DIR = SCRIPT_DIR.parent         # recommender/
-DATA_DIR = RECOMMENDER_DIR / "data" / "processed"
+RECOMMENDER_DIR = SCRIPT_DIR.parent         # recommender/ = /app in container
+DATA_DIR = RECOMMENDER_DIR.parent / "data" / "processed"   # /data/processed
 ARTIFACTS_DIR = RECOMMENDER_DIR / "artifacts"
 
 # =========================
@@ -147,7 +147,7 @@ final_df = top5000_members.merge(
 # =========================
 
 final_df.to_csv(
-    DATA_DIR / "top5000_members_with_language.csv",
+    str(DATA_DIR / "top5000_members_with_language.csv"),
     index=False,
     encoding="utf-8-sig"
 )
