@@ -1,20 +1,20 @@
+from pathlib import Path
 import pandas as pd
+
+SCRIPT_DIR = Path(__file__).parent          # recommender/scripts/
+RECOMMENDER_DIR = SCRIPT_DIR.parent         # recommender/
+DATA_DIR = RECOMMENDER_DIR / "data" / "processed"
+ARTIFACTS_DIR = RECOMMENDER_DIR / "artifacts"
 
 # =========================
 # 讀資料
 # =========================
 
-members = pd.read_parquet(
-    "../data/processed/complete_members.parquet"
-)
+members = pd.read_parquet(DATA_DIR / "complete_members.parquet")
 
-train = pd.read_parquet(
-    "../data/processed/train_encoded.parquet"
-)
+train = pd.read_parquet(DATA_DIR / "train_encoded.parquet")
 
-songs = pd.read_csv(
-    "artifacts/song_for_db.csv"
-)
+songs = pd.read_csv(ARTIFACTS_DIR / "song_for_db.csv")
 
 # =========================
 # 只保留 target == 1
@@ -147,7 +147,7 @@ final_df = top5000_members.merge(
 # =========================
 
 final_df.to_csv(
-    "../data/processed/top5000_members_with_language.csv",
+    DATA_DIR / "top5000_members_with_language.csv",
     index=False,
     encoding="utf-8-sig"
 )
