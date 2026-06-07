@@ -392,10 +392,19 @@ class RecommendationsView(APIView):
 
     def _recommend_purecf(self, user, history_song_ids: list[int], exclude: set[int]):
         """Pure CF 推薦。成功回傳 Response，失敗回傳 None。"""
+        from .affinity_score import compute_affinity_for_user
+
+        # 即時計算最新 affinity
+        compute_affinity_for_user(user)
+        affinity_map = dict(
+            UserSongAffinity.objects.filter(user=user).values_list('song_id', 'score')
+        )
+
         try:
             rec_ids, scores = lightfm_service.recommend_purecf(
                 history_song_ids=history_song_ids,
                 exclude_song_ids=exclude,
+                affinity_map=affinity_map,
                 top_n=20,
             )
         except Exception as exc:
@@ -460,11 +469,31 @@ class RecommendationsView(APIView):
         }, status=status.HTTP_200_OK)
 
     def _build_response(self, user, rec_ids: list[int], scores: list[float], algorithm: str):
-        """從推薦 song_id list 建構 API Response，並存入 DB。"""
+        """從推薦 song_id list 建構 API Response，並存入 DB。含 language re-rank。"""
         from django.utils import timezone
 
         songs = Song.objects.filter(id__in=rec_ids)
         song_map = {s.id: s for s in songs}
+
+        # --- Language re-rank ---
+        # 根據用戶語言偏好對非偏好語言歌曲施加懲罰，然後重新排序
+        preferred_lang_codes = self._get_preferred_lang_codes(user)
+        penalty = settings.LANGUAGE_PENALTY_FACTOR
+
+        if preferred_lang_codes:
+            adjusted = []
+            for i, sid in enumerate(rec_ids):
+                if sid not in song_map:
+                    continue
+                score = scores[i] if i < len(scores) else 0.0
+                song_lang = song_map[sid].language or ''
+                if song_lang not in preferred_lang_codes:
+                    score *= penalty
+                adjusted.append((sid, score))
+            # 按調整後分數重新排序
+            adjusted.sort(key=lambda x: -x[1])
+            rec_ids = [item[0] for item in adjusted]
+            scores = [item[1] for item in adjusted]
 
         data = []
         valid_ids = []
@@ -510,6 +539,28 @@ class RecommendationsView(APIView):
             "data": data,
             "algorithm": algorithm,
         }, status=status.HTTP_200_OK)
+
+    # Language code mapping: user preferred_languages → DB Song.language values
+    # KKBOX codes: 3.0=Chinese(Mandarin), 24.0=Cantonese, 52.0=English,
+    #              17.0=Japanese, 31.0=Korean
+    _LANG_PREF_TO_CODES = {
+        'Chinese': {'3.0', '24.0'},   # 國語 + 粵語
+        'English': {'52.0'},
+        'Japanese': {'17.0'},
+        'Korean': {'31.0'},
+    }
+
+    def _get_preferred_lang_codes(self, user) -> set[str]:
+        """將用戶 preferred_languages 轉為 DB Song.language 對應的 code set。"""
+        if not user.preferred_languages:
+            return set()
+        codes: set[str] = set()
+        for lang in user.preferred_languages.split(','):
+            lang = lang.strip()
+            mapped = self._LANG_PREF_TO_CODES.get(lang)
+            if mapped:
+                codes.update(mapped)
+        return codes
 
 
 class SongDetailView(APIView):

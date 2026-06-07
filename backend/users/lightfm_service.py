@@ -84,9 +84,10 @@ def clear_cache():
 def recommend_purecf(
     history_song_ids: list[int],
     exclude_song_ids: set[int],
+    affinity_map: dict[int, float] | None = None,
     top_n: int = 9,
 ) -> tuple[list[int], list[float]]:
-    """Pure CF 推薦：平均歷史歌曲 embeddings → dot product → top-K。
+    """Pure CF 推薦：Affinity 加權歷史歌曲 embeddings → dot product → top-K。
 
     Parameters
     ----------
@@ -94,6 +95,9 @@ def recommend_purecf(
         用戶聽過的不重複歌曲 ID。
     exclude_song_ids : set[int]
         要排除的歌曲 ID（歷史 + onboarding）。
+    affinity_map : dict[int, float] | None
+        {song_id: affinity_score}，用於加權 user vector。
+        None 時退回等權重平均。
     top_n : int
         回傳的推薦數量。
 
@@ -102,27 +106,50 @@ def recommend_purecf(
     tuple[list[int], list[float]]
         (recommended_song_ids, scores)
     """
+    from .affinity_score import AFFINITY_FILTER_THRESHOLD
+
     item_embeddings, item_biases, song_ids, song_id_to_idx = _load_purecf_bundle()
 
-    # 歷史歌曲 → model 內的 indices
-    indices = [
-        song_id_to_idx[sid]
-        for sid in history_song_ids
-        if sid in song_id_to_idx
-    ]
+    default_affinity = settings.AFFINITY_DEFAULT_WEIGHT
+
+    # 歷史歌曲 → model 內的 indices，並過濾掉 affinity 過低的歌曲
+    valid_sids: list[int] = []
+    for sid in history_song_ids:
+        if sid not in song_id_to_idx:
+            continue
+        if affinity_map is not None:
+            aff = affinity_map.get(sid, default_affinity)
+            if aff < AFFINITY_FILTER_THRESHOLD:
+                continue
+        valid_sids.append(sid)
+
+    indices = [song_id_to_idx[sid] for sid in valid_sids]
 
     if not indices:
         logger.warning(
-            "PureCF: none of the %d history songs found in model",
+            "PureCF: none of the %d history songs valid after affinity filter",
             len(history_song_ids),
         )
         return [], []
 
-    # 等權重平均 → user vector
-    user_vector = item_embeddings[indices].mean(axis=0)
+    # Affinity-weighted average → user vector
+    if affinity_map is not None:
+        raw_weights = np.array(
+            [max(0.0, affinity_map.get(sid, default_affinity) + 0.5) for sid in valid_sids],
+            dtype=np.float32,
+        )
+        weight_sum = raw_weights.sum()
+        if weight_sum > 0:
+            weights = raw_weights / weight_sum
+            user_vector = (item_embeddings[indices] * weights[:, None]).sum(axis=0)
+        else:
+            user_vector = item_embeddings[indices].mean(axis=0)
+    else:
+        user_vector = item_embeddings[indices].mean(axis=0)
 
-    # 計算所有歌曲分數
-    scores = user_vector @ item_embeddings.T + item_biases
+    # 計算所有歌曲分數（含 bias dampening）
+    bias_beta = settings.LIGHTFM_BIAS_DAMPENING
+    scores = user_vector @ item_embeddings.T + bias_beta * item_biases
 
     return _top_k_excluding(scores, song_ids, song_id_to_idx, exclude_song_ids, top_n)
 
@@ -162,7 +189,10 @@ def recommend_hybrid(
     n_components = item_embeddings.shape[1]
 
     # --- Feature vector ---
-    tags = encode_user_features(user.age, user.gender, user.created_at)
+    tags = encode_user_features(
+        user.age, user.gender, user.created_at,
+        preferred_languages=getattr(user, 'preferred_languages', None),
+    )
     feature_vector = np.zeros(n_components, dtype=np.float32)
     feature_bias = 0.0
     valid_count = 0
@@ -202,8 +232,9 @@ def recommend_hybrid(
         logger.warning("Hybrid: no features and no onboarding songs found in model")
         return [], []
 
-    # 計算所有歌曲分數
-    scores = user_vector @ item_embeddings.T + item_biases + feature_bias
+    # 計算所有歌曲分數（含 bias dampening）
+    bias_beta = settings.LIGHTFM_BIAS_DAMPENING
+    scores = user_vector @ item_embeddings.T + bias_beta * (item_biases + feature_bias)
 
     return _top_k_excluding(scores, song_ids, song_id_to_idx, exclude_song_ids, top_n)
 

@@ -160,6 +160,9 @@ LIGHTFM_HYBRID_ARTIFACT_PATH = os.environ.get(
 )
 LIGHTFM_MIN_HISTORY = 10  # 用戶歷史不重複歌曲數達此閾值後切換到 LightFM PureCF
 LIGHTFM_HYBRID_ALPHA = 0.5  # feature_vector vs taste_vector 的混合比例
+LIGHTFM_BIAS_DAMPENING = 0.3  # β ∈ [0,1]: item_biases 衰減因子，降低 popularity bias
+AFFINITY_DEFAULT_WEIGHT = 0.3  # 尚無 affinity 記錄的歌曲在 weighted avg 中的預設 affinity score
+LANGUAGE_PENALTY_FACTOR = 0.7  # 非偏好語言歌曲的 re-rank 懲罰因子
 
 # Session Settings
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'  
