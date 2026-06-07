@@ -25,6 +25,11 @@ _tmp_dataset/
 !recommender/artifacts/itemknn_artifacts.npz
 !recommender/artifacts/artist_id_map_small.csv
 !recommender/artifacts/song_for_db_small.csv
+
+# 放行 recommender Python 源碼下名為 data/ 的模組（被上面 **/data/ 誤殺）
+!recommender/src/data/
+!recommender/src/data/*.py
+# MF 訓練產物太大，明確排除
 # MF / LightFM 訓練產物太大，明確排除
 recommender/artifacts/mf_*
 recommender/artifacts/lightfm_*.npz

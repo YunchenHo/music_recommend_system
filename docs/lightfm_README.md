@@ -1,6 +1,6 @@
 # LightFM 推薦演算法操作手冊
 
-本文件整理 LightFM 在本專案的安裝、訓練、評估、比較流程。LightFM 因相依套件限制必須跑在獨立的 Python 3.11 venv（`.venv-lightfm`），與主環境（Python 3.12 / TensorFlow 等）分離。
+本文件整理 LightFM 在本專案的安裝、訓練、評估、比較流程。LightFM 跟其他 recommender stages 共用 root `.venv`（Python 3.11.13），不再需要獨立 venv。
 
 ---
 
@@ -9,23 +9,22 @@
 每次開新 terminal 都要：
 
 ```bash
-cd ~/Desktop/music_recommend_system/recommender
-source .venv-lightfm/bin/activate
-which python    # 應指向 .venv-lightfm/bin/python
+cd ~/Desktop/music_recommend_system
+source .venv/bin/activate
+which python    # 應指向 .venv/bin/python
 ```
 
-要離開（回主 `.venv` 跑 ItemKNN/MF 等其他 stage）：`deactivate`
+ItemKNN / MF / Popularity / LightFM 所有 stages 都在這個 venv 跑。
 
 ### 首次安裝（重灌 / 換機器才需要）
 
-詳細指令見 `/Users/chiwenhsu/.claude/projects/-Users-chiwenhsu-Desktop-music-recommend-system/memory/lightfm_install_py312.md`。摘要：
+詳細安裝註解見 `recommender/pyproject.toml` 的 LightFM 區塊。摘要：
 
 1. `brew install libomp`
-2. `uv venv --python 3.11 .venv-lightfm`
-3. 在 venv 內裝舊版 build 工具：`uv pip install "setuptools<60" wheel "cython<3" "numpy<2"`
-4. 下載 lightfm 1.17 sdist、patch `setup.py`（將 `__builtins__.__LIGHTFM_SETUP__ = True` 改成 `import builtins as _b; _b.__LIGHTFM_SETUP__ = True`）
-5. `uv pip install --no-build-isolation /tmp/lightfm-1.17/`
-6. 再裝 `pandas tqdm pyarrow`
+2. 在 root `.venv` 內降版 build 工具：`VIRTUAL_ENV=$REPO/.venv uv pip install "numpy<2" "setuptools<60" wheel "cython<3"`
+   - 注意：numpy 必須 <2（LightFM 1.17 build 與執行期 ABI 都需要）。所有其他 deps (tensorflow / pandas / scipy / faiss-cpu) 皆容許 numpy 1.26.x，所以共用 root `.venv` 安全。
+3. 下載 lightfm 1.17 sdist、patch `setup.py`（將 `__builtins__.__LIGHTFM_SETUP__ = True` 改成 `import builtins as _b; _b.__LIGHTFM_SETUP__ = True`）
+4. `CFLAGS="-I/opt/homebrew/opt/libomp/include" LDFLAGS="-L/opt/homebrew/opt/libomp/lib -lomp" uv pip install --no-build-isolation /tmp/lfm/lightfm-1.17/`
 
 ---
 
@@ -326,7 +325,7 @@ ItemKNN 的 sweet spot 在 k=5~10，再多鄰居反而稀釋。整個 grid 變�
 
 | 症狀 | 原因 / 解法 |
 |---|---|
-| `ImportError: lightfm` | 沒 activate `.venv-lightfm`：`source .venv-lightfm/bin/activate` |
+| `ImportError: lightfm` | 沒 activate root `.venv`：`source .venv/bin/activate`；若 root venv 也沒裝 LightFM，照本文件 §0 首次安裝重跑 |
 | `FileNotFoundError: train_encoded.csv` | 先跑 `stage_04b_train_encode_lowram.py` |
 | `FileNotFoundError: lightfm_model.pkl` | 先跑 stage_14 訓練再跑 stage_15 |
 | 評估超慢（>10 min） | 確認 `--num-threads 1`；user 數太大就調 `--top-k-members` |

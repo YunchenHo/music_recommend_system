@@ -210,3 +210,19 @@ uv run python -m pipeline.stage_13_popularity_baseline
 uv run python -m pipeline.run_all --from-stage 00_download --to-stage 04_train
 ```
 
+---
+
+## 📚 文件
+
+技術說明文件統一放在 [`docs/`](./docs/)：
+
+- [`lightfm_README.md`](./docs/lightfm_README.md) — LightFM 操作手冊（安裝、訓練、評估、比較流程）
+- [`coldstart_research.md`](./docs/coldstart_research.md) — 冷啟動研究 pipeline（場景定義、模型對比、跑法）
+- [`coldstart_implementation.md`](./docs/coldstart_implementation.md) — 冷啟動 pipeline 程式碼 walkthrough（資料流、關鍵 algorithm、踩過的坑）
+- [`experiment_summary.md`](./docs/experiment_summary.md) — 所有實驗結果彙整 + 結論（給專題報告用）
+- [`db_lightfm_pipeline.md`](./docs/db_lightfm_pipeline.md) — DB → LightFM pipeline 共同骨幹設計
+- [`ITEMKNN_RECOMMENDATION.md`](./docs/ITEMKNN_RECOMMENDATION.md) — ItemKNN 後端整合
+- [`HISTORY_AND_LIKE_INTEGRATION.md`](./docs/HISTORY_AND_LIKE_INTEGRATION.md) — 歷史紀錄 / Like API 串接
+- [`AFFINITY_SCORE_INTEGRATION.md`](./docs/AFFINITY_SCORE_INTEGRATION.md) — Affinity 分數計算與權重整合
+- [`DIFF_FROM_MAIN.md`](./docs/DIFF_FROM_MAIN.md) — 分支差異紀錄
+

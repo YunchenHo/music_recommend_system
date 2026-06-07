@@ -13,6 +13,7 @@ services:
     volumes:
       - ./backend:/app
       - /app/.venv
+      - ./data:/data
       - ./recommender/artifacts:/app/recommender_artifacts:ro
       - ./data:/app/data:ro
     command: >
@@ -39,7 +40,7 @@ services:
     container_name: music_recommender
     volumes:
       - ./recommender:/app
-      - ./data:/app/data
+      - ./data:/data
     env_file:
       - .env
     tty: true

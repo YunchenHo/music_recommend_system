@@ -29,12 +29,39 @@ metal = [
     "tensorflow-metal==1.1.*",
 ]
 # LightFM is intentionally NOT listed as a dependency here.
-# lightfm 1.17 (last release, 2023) cannot build under Python 3.12 (distutils
-# removed) or with modern setuptools (>=70). Install it manually in a
-# Python 3.11 venv or Colab:
-#   uv venv --python 3.11 .venv-lightfm
-#   source .venv-lightfm/bin/activate
-#   CFLAGS="-I/opt/homebrew/opt/libomp/include" \
-#   LDFLAGS="-L/opt/homebrew/opt/libomp/lib -lomp" \
-#   uv pip install lightfm pandas scipy numpy tqdm pyarrow scikit-learn
-# Then run stage_14_lightfm_train / stage_15_lightfm_eval inside that venv.
+# lightfm 1.17 (last release, 2023, unmaintained) cannot be installed via a
+# plain `uv pip install lightfm`: its setup.py uses
+# `__builtins__.__LIGHTFM_SETUP__ = True`, which breaks under modern
+# setuptools (>=60) PEP 517 build isolation (`__builtins__` is a dict in that
+# context). Build requires numpy<2 and cython<3.
+#
+# Install into the root `.venv` (Py 3.11.13) using the patched-sdist recipe:
+#   # 1. Pin old build deps + numpy<2 (numpy must stay <2 for lightfm runtime ABI)
+#   VIRTUAL_ENV=$REPO/.venv uv pip install "numpy<2" "setuptools<60" wheel "cython<3"
+#
+#   # 2. Download lightfm 1.17 sdist + patch setup.py
+#   mkdir -p /tmp/lfm && cd /tmp/lfm
+#   curl -fsSL -o lightfm-1.17.tar.gz \
+#     https://files.pythonhosted.org/packages/1f/96/5ec230f5c27811534af0faaa8525f11c1000ee1c24c8a82c0546d0724aea/lightfm-1.17.tar.gz
+#   tar xzf lightfm-1.17.tar.gz
+#   # Patch setup.py line 11: replace
+#   #   __builtins__.__LIGHTFM_SETUP__ = True
+#   # with
+#   #   import builtins as _builtins; _builtins.__LIGHTFM_SETUP__ = True
+#
+#   # 3. libomp is required for OpenMP (optional, falls back to single-thread)
+#   brew install libomp
+#
+#   # 4. Build & install with --no-build-isolation
+#   cd $REPO && VIRTUAL_ENV=$REPO/.venv \
+#     CFLAGS="-I/opt/homebrew/opt/libomp/include" \
+#     LDFLAGS="-L/opt/homebrew/opt/libomp/lib -lomp" \
+#     uv pip install --no-build-isolation /tmp/lfm/lightfm-1.17
+#
+# Notes:
+# - You will see `UserWarning: LightFM was compiled without OpenMP support`
+#   on import. This is OK; just pass `num_threads=1` to fit/evaluate calls.
+# - Constraints across deps: all of tensorflow/pandas/scipy/faiss-cpu accept
+#   numpy 1.26.x, so root .venv stays on numpy 1.26.4.
+# - stage_14_lightfm_train.py / stage_15_lightfm_eval.py run in root `.venv`
+#   (no separate `.venv-lightfm` anymore).

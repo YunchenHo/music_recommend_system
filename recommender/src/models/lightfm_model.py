@@ -99,14 +99,18 @@ def _bucket_quantile(s: pd.Series, n_buckets: int = 5, prefix: str = "b") -> pd.
 def build_user_feature_tags(
     members: pd.DataFrame, top_k_cities: int = 30
 ) -> dict[int, list[str]]:
-    """Build a {msno_id: [feature_tag, ...]} map from complete_members.parquet."""
-    m = members.copy()
+    """Build a {msno_id: [feature_tag, ...]} map from complete_members.parquet.
 
-    city_counts = m["city"].value_counts()
-    top_cities = set(city_counts.head(top_k_cities).index.tolist())
-    m["city_tag"] = m["city"].apply(
-        lambda c: f"city_{int(c)}" if c in top_cities else "city_other"
-    )
+    Only uses 3 features that are available in the production DB:
+    - bd_group (age bucket)
+    - gender
+    - membership_group (tenure bucket)
+
+    city and registered_via are intentionally excluded — they are not collected
+    in the production system and provide little discriminative value for our
+    user base.
+    """
+    m = members.copy()
 
     gender_tag = []
     for fem, mal in zip(m["gender_female"].values, m["gender_male"].values):
@@ -120,9 +124,8 @@ def build_user_feature_tags(
 
     m["bd_tag"] = "bd_" + m["bd_group"].astype(int).astype(str)
     m["ms_tag"] = "ms_" + m["membership_group"].astype(int).astype(str)
-    m["reg_tag"] = "reg_" + m["registered_via"].astype(int).astype(str)
 
-    feature_cols = ["bd_tag", "gender_tag", "ms_tag", "reg_tag", "city_tag"]
+    feature_cols = ["bd_tag", "gender_tag", "ms_tag"]
     user_features = {
         int(row.msno_id): [getattr(row, c) for c in feature_cols]
         for row in m.itertuples(index=False)
