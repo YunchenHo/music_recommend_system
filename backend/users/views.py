@@ -1,5 +1,7 @@
 import logging
+import random
 import re
+from datetime import timedelta
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -10,6 +12,7 @@ from django.conf import settings
 from django.contrib.auth import login, logout
 from django.db import connection
 from django.db.models import Count
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.utils.decorators import method_decorator
 from django.http import JsonResponse
@@ -34,6 +37,10 @@ from .models import (
     History,
     UserSongLike,
     UserSongAffinity,
+    Friendship,
+    UserXP,
+    DailyChallenge,
+    DailyChallengeProgress,
 )
 
 logger = logging.getLogger(__name__)
@@ -674,6 +681,8 @@ class FavoritesView(APIView):
                 "code": "ALREADY_FAVORITED",
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        _increment_challenge(request.user, 2)  # 加入收藏也算進「加入清單」挑戰
+
         return Response({
             "status": "success",
             "message": "Song added to favorites.",
@@ -840,6 +849,7 @@ class PlaylistListCreateView(APIView):
             playlist_name=playlist_name,
             icon=icon,
         )
+        _increment_challenge(request.user, 5)  # 新創清單
 
         return Response({
             "status": "success",
@@ -1037,6 +1047,8 @@ class PlaylistSongListCreateView(APIView):
                 "code": "ALREADY_IN_PLAYLIST",
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        _increment_challenge(request.user, 2)  # 加歌到清單
+
         return Response({
             "status": "success",
             "message": "Song added to playlist.",
@@ -1228,7 +1240,18 @@ class HistoryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # 記錄「是否已有過此歌的播放紀錄」（重聽判斷用，在 create 前查）
+        has_prior_history = History.objects.filter(user=user, song=song, is_hidden=False).exists()
+
         history = History.objects.create(user=user, song=song, watch_seconds=watch_seconds, source=source)
+
+        # 挑戰追蹤：只在「一開始就達到 120 秒」時觸發（通常 PATCH 才會到，但保險起見也加）
+        if watch_seconds >= 120:
+            _increment_challenge(user, 1)   # 聆聽 N 首歌曲
+            if source == History.SourceChoices.RECOMMENDATION:
+                _increment_challenge(user, 6)  # 從推薦清單聆聽
+            if has_prior_history:
+                _increment_challenge(user, 4)  # 重聽
 
         return Response({
             "status": "success",
@@ -1254,7 +1277,7 @@ class HistoryView(APIView):
             offset = int(offset)
             if limit <= 0 or offset < 0:
                 raise ValueError
-            limit = min(limit, self.MAX_LIMIT) # 上限保護
+            limit = min(limit, self.MAX_LIMIT)
         except ValueError:
             return Response({
                 "status": "error",
@@ -1262,10 +1285,10 @@ class HistoryView(APIView):
                 "code": "INVALID_LIMIT_OR_OFFSET",
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        queryset = History.objects.filter(user=user).select_related('song')
+        base_qs = History.objects.filter(user=user, is_hidden=False)
 
         if song_id is not None:
-            queryset = queryset.filter(song_id=song_id)
+            base_qs = base_qs.filter(song_id=song_id)
 
         if source is not None:
             if source not in History.SourceChoices.values:
@@ -1274,30 +1297,43 @@ class HistoryView(APIView):
                     "message": "Invalid source.",
                     "code": "INVALID_SOURCE",
                 }, status=status.HTTP_400_BAD_REQUEST)
-            queryset = queryset.filter(source=source)
+            base_qs = base_qs.filter(source=source)
 
-        queryset = queryset.order_by('-played_at') # 按 played_at 排序，最新在前
+        # 以 song_id 去重，取每首最近播放時間，limit 語意 = N 首不同歌
+        from django.db.models import Max
+        distinct_qs = (
+            base_qs
+            .values('song_id')
+            .annotate(last_played=Max('played_at'))
+            .order_by('-last_played')
+        )
 
-        # 取得總筆數
-        total = queryset.count()
-        queryset = queryset[offset:offset+limit]
+        total = distinct_qs.count()
+        paged = list(distinct_qs[offset:offset + limit])
 
-        results = [ ]
-        for history in queryset:
-            song = history.song
-            results.append({
-                "id": history.id,
-                "song_id": history.song_id,
-                "song_title": song.song_title,
-                "artist_name": song.artist_name,
-                "album_name": song.album_name,
-                "song_image": song.song_image,
-                "language": song.language,
-                "watch_seconds": history.watch_seconds,
-                "source": history.source,
-                "played_at": history.played_at,
-                "created_at": history.created_at,
-            })
+        results = []
+        for item in paged:
+            h = (
+                History.objects
+                .filter(user=user, song_id=item['song_id'], is_hidden=False)
+                .select_related('song')
+                .order_by('-played_at')
+                .first()
+            )
+            if h:
+                results.append({
+                    "id": h.id,
+                    "song_id": h.song_id,
+                    "song_title": h.song.song_title,
+                    "artist_name": h.song.artist_name,
+                    "album_name": h.song.album_name,
+                    "song_image": h.song.song_image,
+                    "language": h.song.language,
+                    "watch_seconds": h.watch_seconds,
+                    "source": h.source,
+                    "played_at": h.played_at,
+                    "created_at": h.created_at,
+                })
 
         return Response({
             "status": "success",
@@ -1354,8 +1390,21 @@ class HistoryDetailView(APIView):
         # 單調遞增保護：避免 race condition 導致較新的小值蓋掉較大的值
         # （例如重新整理時末段 PATCH 比中段 PATCH 晚抵達）
         if watch_seconds > history.watch_seconds:
+            old_ws = history.watch_seconds
             history.watch_seconds = watch_seconds
             history.save(update_fields=['watch_seconds'])
+
+            # 挑戰追蹤：首次跨過 120 秒門檻時觸發（old < 120 <= new）
+            if old_ws < 120 <= watch_seconds:
+                _increment_challenge(request.user, 1)  # 聆聽 N 首歌曲
+                if history.source == History.SourceChoices.RECOMMENDATION:
+                    _increment_challenge(request.user, 6)  # 從推薦清單聆聽
+                # 重聽：此 history 建立前就已有此歌的其他紀錄
+                is_replay = History.objects.filter(
+                    user=request.user, song=history.song, is_hidden=False
+                ).exclude(pk=history.pk).exists()
+                if is_replay:
+                    _increment_challenge(request.user, 4)  # 重聽
 
         return Response({
             "status": "success",
@@ -1366,6 +1415,31 @@ class HistoryDetailView(APIView):
                 "watch_seconds": history.watch_seconds,
                 "source": history.source,
             },
+        }, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk):
+        try:
+            history = History.objects.get(pk=pk)
+        except History.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "History not found.",
+                "code": "HISTORY_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        if history.user_id != request.user.id:
+            return Response({
+                "status": "error",
+                "message": "History not found.",
+                "code": "HISTORY_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        history.is_hidden = True
+        history.save(update_fields=['is_hidden'])
+
+        return Response({
+            "status": "success",
+            "message": "History hidden.",
         }, status=status.HTTP_200_OK)
 
 
@@ -1440,4 +1514,382 @@ class UserSongLikeView(APIView):
                 user=request.user, song_id=song_id,
                 defaults={'is_liked': intent_like},
             )
+        _increment_challenge(request.user, 3)  # 按讚或倒讚（設定時算，取消不算）
         return Response({"status": "success", "data": {"is_liked": intent_like}})
+    
+
+class FriendSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        email = request.query_params.get("email", "").strip()
+
+        if not email:
+            return Response({
+                "status": "error",
+                "message": "email is required.",
+                "code": "MISSING_EMAIL",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "User not found.",
+                "code": "USER_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        if user.id == request.user.id:
+            return Response({
+                "status": "error",
+                "message": "You cannot add yourself.",
+                "code": "CANNOT_ADD_SELF",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            "status": "success",
+            "data": {
+                "id": user.id,
+                "username": user.nickname or user.username,
+                "email": user.email,
+                "profile_picture": user.profile_picture,
+            }
+        })
+    
+
+class FriendListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        friendships = Friendship.objects.filter(
+            user=request.user
+        ).select_related("friend")
+
+        data = [
+            {
+                "id": item.friend.id,
+                "username": item.friend.nickname or item.friend.username,
+                "email": item.friend.email,
+                "profile_picture": item.friend.profile_picture,
+            }
+            for item in friendships
+        ]
+
+        return Response({
+            "status": "success",
+            "data": data,
+        })
+
+    def post(self, request):
+        friend_id = request.data.get("friend_id")
+
+        if not friend_id:
+            return Response({
+                "status": "error",
+                "message": "friend_id is required.",
+                "code": "MISSING_FRIEND_ID",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            friend = User.objects.get(id=friend_id)
+        except User.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "User not found.",
+                "code": "USER_NOT_FOUND",
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        if friend.id == request.user.id:
+            return Response({
+                "status": "error",
+                "message": "You cannot add yourself.",
+                "code": "CANNOT_ADD_SELF",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        friendship, created = Friendship.objects.get_or_create(
+            user=request.user,
+            friend=friend,
+        )
+
+        if not created:
+            return Response({
+                "status": "error",
+                "message": "Already friends.",
+                "code": "ALREADY_FRIENDS",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            "status": "success",
+            "message": "Friend added.",
+        }, status=status.HTTP_201_CREATED)
+    
+
+class FriendListeningView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        friendships = Friendship.objects.filter(
+            user=request.user
+        ).select_related("friend")
+
+        data = []
+
+        for friendship in friendships:
+            friend = friendship.friend
+
+            latest_history = (
+                History.objects
+                .filter(user=friend, is_hidden=False)
+                .select_related("song")
+                .order_by("-played_at")
+                .first()
+            )
+
+            if latest_history is None:
+                continue
+
+            song = latest_history.song
+
+            data.append({
+                "id": f"{friend.id}-{song.id}",
+                "friend_id": friend.id,
+                "friend_name": friend.nickname or friend.username,
+                "song_id": song.id,
+                "song_title": song.song_title,
+                "artist_name": song.artist_name,
+                "song_image": song.song_image,
+                "played_at": latest_history.played_at,
+            })
+
+        return Response({
+            "status": "success",
+            "data": data,
+        }, status=status.HTTP_200_OK)
+
+
+# ── 養漢堡 / Daily Challenge ──────────────────────────────
+
+# 升到各等級所需的「累積總 XP」門檻：LV2=50, LV3=100, ..., LV6=800
+LEVEL_XP_THRESHOLDS = [50, 100, 200, 400, 800]
+
+
+def _compute_level(total_xp):
+    """從累積總 XP 計算當前等級（1–6）。"""
+    lv = 1
+    for threshold in LEVEL_XP_THRESHOLDS:
+        if total_xp >= threshold:
+            lv += 1
+        else:
+            break
+    return lv  # 最大就是 6，因為 LEVEL_XP_THRESHOLDS 只有 5 個門檻
+
+
+def _get_or_create_xp(user):
+    """取得（或初始化）用戶的 XP 記錄。"""
+    xp_obj, _ = UserXP.objects.get_or_create(user=user)
+    return xp_obj
+
+
+def _add_xp(user, amount=5):
+    """加 XP，XP 永不歸零，等級由總 XP 決定。滿級後不再累加。"""
+    xp_obj = _get_or_create_xp(user)
+    if xp_obj.lv >= 6:
+        return xp_obj  # 已滿級，什麼都不做
+    xp_obj.xp += amount
+    xp_obj.lv = _compute_level(xp_obj.xp)
+    xp_obj.save()
+    return xp_obj
+
+
+def _increment_challenge(user, challenge_type, today=None):
+    """
+    今日對應類型任務的 current_count +1。
+    若 current_count 達到 target_n，自動標記完成並給 +5 XP。
+    已完成或今日沒有這個類型的任務則直接略過。
+
+    challenge_type 對照：
+      1 = 聆聽（watch_seconds ≥ 120）
+      2 = 加入歌曲至清單
+      3 = 按讚或倒讚
+      4 = 重聽
+      5 = 新創清單
+      6 = 從推薦清單聆聽
+    """
+    if today is None:
+        today = timezone.localdate()
+    try:
+        progress = DailyChallengeProgress.objects.get(
+            user=user,
+            challenge__challenge_type=challenge_type,
+            date=today,
+            is_completed=False,
+        )
+    except DailyChallengeProgress.DoesNotExist:
+        return  # 今日無此任務或已完成，略過
+
+    progress.current_count = min(progress.current_count + 1, progress.target_n)
+    if progress.current_count >= progress.target_n:
+        progress.is_completed = True
+        progress.save()
+        _add_xp(user, amount=5)
+    else:
+        progress.save()
+
+
+class ChallengeXPView(APIView):
+    """GET /api/challenge/xp/ — 回傳當前用戶的等級和 XP。"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        xp_obj = _get_or_create_xp(request.user)
+        lv = xp_obj.lv
+        total_xp = xp_obj.xp
+
+        if lv < 6:
+            # 本等級起始門檻（LV1 起點 = 0）
+            lv_start = LEVEL_XP_THRESHOLDS[lv - 2] if lv > 1 else 0
+            lv_end   = LEVEL_XP_THRESHOLDS[lv - 1]
+            xp_in_level  = total_xp - lv_start   # 本等級已累積
+            xp_for_level = lv_end - lv_start      # 本等級需要幾 XP 才升級
+        else:
+            xp_in_level  = total_xp - LEVEL_XP_THRESHOLDS[-1]
+            xp_for_level = None  # 滿級
+
+        return Response({
+            "lv": lv,
+            "xp": total_xp,            # 累積總 XP
+            "xp_in_level": xp_in_level,   # 本等級內已累積（給前端進度條用）
+            "xp_for_level": xp_for_level,  # 本等級升級需要幾 XP
+        })
+
+
+class ChallengeTodayView(APIView):
+    """GET /api/challenge/today/ — 回傳今日 3 個任務。
+
+    規則：
+    - 今天已有 3 筆 → 直接回傳（當天任務固定不換）
+    - 今天沒有 → 看昨天的記錄：
+        * 昨天未完成的任務 → 今天繼續（沿用相同任務 + N 值，進度歸零）
+        * 昨天已完成的任務 → 今天重新隨機抽一個新的
+        * 完全沒有昨天的記錄（新用戶）→ 全部隨機抽 3 個
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        today = timezone.localdate()
+        yesterday = today - timedelta(days=1)
+        user = request.user
+
+        # 今天已有任務 → 直接回傳
+        today_qs = list(
+            DailyChallengeProgress.objects
+            .filter(user=user, date=today)
+            .select_related('challenge')
+        )
+        if len(today_qs) >= 3:
+            return Response(self._serialize(today_qs))
+
+        all_challenges = list(DailyChallenge.objects.all())
+        if len(all_challenges) < 3:
+            return Response({"error": "任務尚未初始化，請執行 seed_challenges"}, status=500)
+
+        # 看昨天的記錄
+        prev_qs = list(
+            DailyChallengeProgress.objects
+            .filter(user=user, date=yesterday)
+            .select_related('challenge')
+        )
+
+        new_today = []
+
+        if prev_qs:
+            uncompleted = [p for p in prev_qs if not p.is_completed]
+            completed   = [p for p in prev_qs if p.is_completed]
+
+            # 昨天未完成 → 今天繼續，進度重置為 0
+            for p in uncompleted:
+                new_p, _ = DailyChallengeProgress.objects.get_or_create(
+                    user=user, challenge=p.challenge, date=today,
+                    defaults={"target_n": p.target_n},
+                )
+                new_today.append(new_p)
+
+            # 昨天完成的 → 重新抽（排除已選的任務，避免重複）
+            used_ids = {p.challenge_id for p in uncompleted}
+            pool = [c for c in all_challenges if c.id not in used_ids]
+            for _ in completed:
+                if not pool:
+                    break
+                challenge = random.choice(pool)
+                pool.remove(challenge)
+                n = random.randint(challenge.min_n, challenge.max_n)
+                new_p, _ = DailyChallengeProgress.objects.get_or_create(
+                    user=user, challenge=challenge, date=today,
+                    defaults={"target_n": n},
+                )
+                new_today.append(new_p)
+        else:
+            # 新用戶或第一次，全部隨機抽 3 個
+            for challenge in random.sample(all_challenges, 3):
+                n = random.randint(challenge.min_n, challenge.max_n)
+                new_p, _ = DailyChallengeProgress.objects.get_or_create(
+                    user=user, challenge=challenge, date=today,
+                    defaults={"target_n": n},
+                )
+                new_today.append(new_p)
+
+        return Response(self._serialize(new_today))
+
+    @staticmethod
+    def _serialize(progresses):
+        return [
+            {
+                "id": p.id,
+                "challenge_type": p.challenge.challenge_type,
+                "prefix": p.challenge.prefix,
+                "n": p.target_n,
+                "suffix": p.challenge.suffix,
+                "current_count": p.current_count,
+                "is_completed": p.is_completed,
+            }
+            for p in progresses
+        ]
+
+
+class ChallengeCompleteView(APIView):
+    """POST /api/challenge/complete/<pk>/ — 標記任務完成並加 5 XP。"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            progress = DailyChallengeProgress.objects.get(id=pk, user=request.user)
+        except DailyChallengeProgress.DoesNotExist:
+            return Response({"error": "任務不存在"}, status=status.HTTP_404_NOT_FOUND)
+
+        if progress.is_completed:
+            return Response({"message": "已完成", "already_done": True})
+
+        progress.is_completed = True
+        progress.save()
+
+        xp_obj = _add_xp(request.user, amount=5)
+        lv = xp_obj.lv
+        total_xp = xp_obj.xp
+        if lv < 6:
+            lv_start = LEVEL_XP_THRESHOLDS[lv - 2] if lv > 1 else 0
+            lv_end   = LEVEL_XP_THRESHOLDS[lv - 1]
+            xp_in_level  = total_xp - lv_start
+            xp_for_level = lv_end - lv_start
+        else:
+            xp_in_level  = total_xp - LEVEL_XP_THRESHOLDS[-1]
+            xp_for_level = None
+        return Response({
+            "message": "+5 XP",
+            "lv": lv,
+            "xp": total_xp,
+            "xp_in_level": xp_in_level,
+            "xp_for_level": xp_for_level,
+        })
+
+

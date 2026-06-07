@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Top bun dome -->
+  <path d="M50,8 C26,8 11,23 11,42 L89,42 C89,23 74,8 50,8 Z" fill="#ff7789"/>
+  <!-- Sesame seeds -->
+  <ellipse cx="34" cy="28" rx="6" ry="3.5" fill="white" opacity="0.9" transform="rotate(-22,34,28)"/>
+  <ellipse cx="50" cy="21" rx="6" ry="3.5" fill="white" opacity="0.9"/>
+  <ellipse cx="66" cy="28" rx="6" ry="3.5" fill="white" opacity="0.9" transform="rotate(22,66,28)"/>
+  <!-- Top bun base strip -->
+  <rect x="11" y="42" width="78" height="6" rx="3" fill="#ff7789"/>
+  <!-- Filling / patty layer (gap above is transparent) -->
+  <rect x="7" y="54" width="86" height="9" rx="4.5" fill="#ff7789"/>
+  <!-- Bottom bun (gap above is transparent) -->
+  <path d="M11,69 L89,69 C89,85 74,93 50,93 C26,93 11,85 11,69 Z" fill="#ff7789"/>
+</svg>

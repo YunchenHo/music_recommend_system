@@ -11,6 +11,9 @@ from .views import (
     HistoryView,
     HistoryDetailView,
     UserSongLikeView,
+    FriendSearchView,
+    FriendListCreateView,
+    FriendListeningView,
 )
 
 urlpatterns = [
@@ -25,4 +28,7 @@ urlpatterns = [
     path('history', HistoryView.as_view(), name='history'),
     path('history/<int:pk>', HistoryDetailView.as_view(), name='history-detail'),
     path('like', UserSongLikeView.as_view(), name='like'),
+    path('friends/search', FriendSearchView.as_view(), name='friend-search'),
+    path('friends', FriendListCreateView.as_view(), name='friends'),
+    path('friends/listening', FriendListeningView.as_view(), name='friend-listening'),
 ]

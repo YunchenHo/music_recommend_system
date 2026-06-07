@@ -1525,7 +1525,7 @@ input:focus {
   top: 58px;
   right: 0;
 
-  width: 220px;
+  width: 280px;
 
   background: #bfe0ff;
   border: 3px solid #5d6bd6;
@@ -1535,7 +1535,7 @@ input:focus {
 
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
 
   z-index: 9999;
 
@@ -1543,36 +1543,30 @@ input:focus {
 }
 
 .user-dropdown-name {
-  font-size: 2rem;
+  font-size: 1.8rem;
   font-weight: 700;
   color: #4b2ca3;
-
+  text-align: center;
   word-break: break-word;
 }
 
-/* logout button */
+/* logout button — 與 daily-challenge-open-btn 一致 */
 .logout-btn {
   width: 100%;
-
   border: none;
   border-radius: 16px;
-
-  background: #6e6fe0;
+  background: #4b5fd1;
   color: white;
-
-  font-size: 1.6rem;
+  font-size: 1rem;
   font-weight: 700;
-
-  padding: 14px 0;
-
+  font-family: 'jf open 粉圓', 'Noto Sans TC', sans-serif;
+  padding: 12px 0;
   cursor: pointer;
-
-  transition: transform 0.15s ease,
-              background 0.2s ease;
+  transition: transform 0.15s ease, background 0.2s ease;
 }
 
 .logout-btn:hover {
-  background: #5d5fd6;
+  background: #3a4ec0;
   transform: translateY(-2px);
 }
 
@@ -1607,4 +1601,428 @@ input:focus {
   color: rgba(255,255,255,0.9);
 
   font-weight: 600;
+}
+
+
+
+
+/* 讓歌名過長時只裁切歌名，不裁切右邊三個點 */
+.playlist-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  overflow: visible; /* 不要裁掉三個點 */
+}
+
+/* 歌名文字才做省略 */
+.playlist-song-title {
+  flex: 1;
+  min-width: 0;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 三個點固定不被壓縮 */
+.playlist-more {
+  flex-shrink: 0;
+  margin-left: 8px;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px 8px;
+  position: relative;
+  z-index: 2;
+}
+
+
+/* ══════════════════════════════════════════
+   User Dropdown 新增欄位
+   ══════════════════════════════════════════ */
+.user-dropdown-level {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #5d6bd6;
+  margin-top: -8px;
+}
+
+.user-dropdown-xp-wrap {
+  width: 100%;
+  height: 12px;
+  background: #dde8ff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.user-dropdown-xp-fill {
+  height: 100%;
+  background: #4b5fd1;
+  border-radius: 8px;
+  transition: width 0.3s ease;
+}
+
+.user-dropdown-xp-label {
+  font-size: 0.75rem;
+  color: #4b5fd1;
+  font-weight: 600;
+  text-align: right;
+  margin-top: -4px;
+}
+
+.daily-challenge-open-btn {
+  width: 100%;
+  border: none;
+  border-radius: 16px;
+  background: #4b5fd1;
+  color: white;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: 'jf open 粉圓', 'Noto Sans TC', sans-serif;
+  padding: 12px 0;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+
+.daily-challenge-open-btn:hover {
+  background: #3a4ec0;
+  transform: translateY(-2px);
+}
+
+/* ══════════════════════════════════════════
+   漢堡分頁 View
+   ══════════════════════════════════════════ */
+.burger-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  padding-top: 20px;
+}
+
+.burger-page-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.burger-page-title {
+  font-family: 'Changa One', sans-serif;
+  font-size: 2.4rem;
+  color: var(--red-dark);
+}
+
+.burger-level-badge {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-mid);
+  background: var(--pink-light);
+  border: 2.5px solid var(--pink-border);
+  border-radius: 20px;
+  padding: 7px 24px;
+  display: inline-block;
+}
+
+.burger-visual-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+/* ── 漢堡堆疊 ── */
+.burger-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 336px;
+}
+
+.burger-crown {
+  width: 90px;
+  margin-bottom: -14px;
+  z-index: 2;
+  position: relative;
+}
+
+/* 頂部麵包胚 + 芝麻（疊層）*/
+.burger-top-bun-wrap {
+  position: relative;
+  width: 336px;
+  line-height: 0;
+}
+
+.burger-top-bun {
+  width: 336px;
+  display: block;
+}
+
+.burger-sesame-on-bun {
+  position: absolute;
+  width: 55%;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* LV1：芝麻粒堆 */
+.burger-sesame-pile {
+  width: 220px;
+  display: block;
+  padding: 10px 16px;
+  background: var(--pink-light);
+  border: 3px dashed var(--pink-border);
+  border-radius: 20px;
+}
+
+/* 生菜葉 */
+.burger-lettuce {
+  width: 370px;
+  display: block;
+  margin-top: -32px;
+}
+
+/* 煎雞蛋 */
+.burger-egg {
+  width: 294px;
+  display: block;
+  margin-top: -28px;
+}
+
+/* 大雞排 */
+.burger-chicken {
+  width: 318px;
+  display: block;
+  margin-top: -18px;
+}
+
+/* 底部麵包胚 */
+.burger-bottom-bun {
+  width: 336px;
+  display: block;
+  margin-top: -18px;
+}
+
+/* XP 進度 */
+.burger-xp-section {
+  text-align: center;
+  width: 336px;
+}
+
+.burger-xp-bar-wrap {
+  width: 100%;
+  height: 22px;
+  background: var(--pink-light);
+  border: 2.5px solid var(--pink-border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.burger-xp-bar-fill {
+  height: 100%;
+  background: var(--pink-border);
+  border-radius: 10px;
+  transition: width 0.4s ease;
+}
+
+.burger-xp-label {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-mid);
+}
+
+/* ══════════════════════════════════════════
+   Daily Challenge Modal
+   ══════════════════════════════════════════ */
+.challenge-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(221, 242, 186, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.challenge-modal {
+  width: 60vw;
+  height: 60vh;
+  background: #a9d6f5;
+  border-radius: 28px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.challenge-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.challenge-modal-title {
+  font-family: 'Changa One', sans-serif;
+  font-size: 2rem;
+  color: #111;
+  flex: 1;
+}
+
+.challenge-close-btn {
+  border: none;
+  background: transparent;
+  font-size: 2.2rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: #ff6b6b;
+  line-height: 1;
+}
+
+.challenge-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* 任務方格：填滿同邊框色 */
+.challenge-task-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #7b71e1;
+  border: 3px solid #7b71e1;
+  border-radius: 18px;
+  padding: 16px 18px;
+  flex-shrink: 0;
+}
+
+/* 數字圓圈：白底 + 對應邊框色 */
+.challenge-task-num {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  background: white;
+  border: 3px solid #7b71e1;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #7b71e1;
+}
+
+/* 任務文字 */
+.challenge-task-text {
+  flex: 1;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: white;
+  font-family: 'jf open 粉圓', 'Noto Sans TC', sans-serif;
+}
+
+.challenge-n {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #ffe4a0;
+}
+
+/* 勾勾圓圈：白底 + 邊框色（完成後變綠）*/
+.challenge-task-check {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  background: white;
+  border: 3px solid #7b71e1;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #7b71e1;
+}
+
+.challenge-task-check.checked {
+  border-color: #4caf50;
+  color: #4caf50;
+}
+
+/* ══════════════════════════════════════════
+   Challenge 完成 Toast
+   ══════════════════════════════════════════ */
+.challenge-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  z-index: 10000;
+  background: #7b71e1;
+  border: 3px solid #5f55c8;
+  color: white;
+  padding: 14px 22px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 6px 24px rgba(123, 113, 225, 0.45);
+  min-width: 320px;
+  max-width: 520px;
+  animation: toast-slide-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.challenge-toast.hiding {
+  animation: toast-slide-out 0.38s cubic-bezier(0.64, 0, 0.78, 0) forwards;
+}
+
+@keyframes toast-slide-in {
+  from { transform: translateX(-50%) translateY(-130%); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}
+
+@keyframes toast-slide-out {
+  from { transform: translateX(-50%) translateY(0);    opacity: 1; }
+  to   { transform: translateX(-50%) translateY(-130%); opacity: 0; }
+}
+
+.challenge-toast-check {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  background: white;
+  border: 3px solid #4caf50;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4caf50;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.challenge-toast-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.challenge-toast-label {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.82;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.challenge-toast-desc {
+  font-size: 15px;
+  font-weight: 700;
 }

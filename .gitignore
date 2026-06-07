@@ -5,6 +5,7 @@ __pycache__/
 *.pyd
 .venv/
 .venv-lightfm/
+recommender/.venv-lightfm/
 
 # Data artifacts 
 **/data/
@@ -29,6 +30,7 @@ _tmp_dataset/
 !recommender/src/data/
 !recommender/src/data/*.py
 # MF 訓練產物太大，明確排除
+# MF / LightFM 訓練產物太大，明確排除
 recommender/artifacts/mf_*
 recommender/artifacts/lightfm_*.npz
 recommender/artifacts/*.npy

@@ -55,3 +55,8 @@ export async function updateHistory(historyId, watchSeconds) {
   })
   return data
 }
+
+export async function deleteHistory(historyId) {
+  const { data } = await api.delete(`/api/auth/history/${historyId}`)
+  return data
+}
