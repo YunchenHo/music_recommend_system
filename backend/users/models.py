@@ -259,3 +259,92 @@ class UserKKBoxProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} -> {self.msno}"
+    
+    
+class Friendship(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="friendships"
+    )
+    friend = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="friend_of"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "friend")
+
+class FriendRequest(models.Model):
+    class StatusChoices(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
+
+    from_user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="sent_friend_requests"
+    )
+    to_user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="received_friend_requests"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=StatusChoices.choices,
+        default=StatusChoices.PENDING
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("from_user", "to_user")
+
+
+# ── 養漢堡 / Daily Challenge ──────────────────────────────
+
+class UserXP(models.Model):
+    """每個用戶只有一筆，記錄等級與 XP。"""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='xp_profile')
+    lv = models.PositiveSmallIntegerField(default=1)
+    xp = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user} LV{self.lv} {self.xp}XP"
+
+
+class DailyChallenge(models.Model):
+    """9 個任務定義，固定不變，用 seed_challenges 指令寫入一次。"""
+    challenge_type = models.PositiveSmallIntegerField(unique=True)  # 1–9
+    prefix = models.CharField(max_length=50)   # 例：「聆聽」
+    suffix = models.CharField(max_length=100)  # 例：「首歌曲」
+    min_n = models.PositiveSmallIntegerField()
+    max_n = models.PositiveSmallIntegerField()
+
+    def __str__(self):
+        return f"#{self.challenge_type} {self.prefix} N {self.suffix}"
+
+
+class DailyChallengeProgress(models.Model):
+    """每個用戶每天最多 3 筆，記錄今日任務進度。"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='challenge_progresses')
+    challenge = models.ForeignKey(DailyChallenge, on_delete=models.CASCADE)
+    date = models.DateField()
+    target_n = models.PositiveSmallIntegerField()        # 今天抽到的目標數量
+    current_count = models.PositiveSmallIntegerField(default=0)
+    is_completed = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'challenge', 'date'],
+                name='unique_user_challenge_date'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user} 任務{self.challenge.challenge_type} {self.date} {self.current_count}/{self.target_n}"
