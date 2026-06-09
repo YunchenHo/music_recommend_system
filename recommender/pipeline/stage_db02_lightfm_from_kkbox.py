@@ -4,12 +4,19 @@ Uses the pre-processed `train_encoded.parquet` (5000 users, ~246K songs),
 `complete_members.parquet`, and `song_merge.parquet` to train two separate
 LightFM models:
 
-1. Pure CF  → artifacts/lightfm_purecf.npz  (for warm users with ≥10 history songs)
-2. Hybrid   → artifacts/lightfm_hybrid.npz  (for cold-start users, includes user feature embeddings)
+1. Pure CF  → artifacts/lightfm_purecf.npz
+   - Identity-only matrix factorization (no user features, no item features).
+   - Best for warm users with ≥10 history songs where collaborative signal
+     dominates and side-information adds noise.
+   - Exports raw item embeddings directly from `model.item_embeddings`.
 
-Both models now include:
-- Item features: song language tag (lang_{code}) to encode language in embeddings
-- User features (hybrid only): demographics + language preference (lang_pref_{code})
+2. Hybrid   → artifacts/lightfm_hybrid.npz
+   - Item features (~5208 tags): artist (5001), language (~10), length (5),
+     genre (~192).  Built via `build_item_feature_tags()`.
+   - User features (21 tags): bd_group (7), gender (3), membership_group (7),
+     lang_pref (4).
+   - For cold-start users who lack sufficient interaction history.
+   - Exports feature-weighted embeddings (item_feature_matrix @ feature_embeddings).
 
 The output .npz files are directly consumed by the backend `lightfm_service.py`
 without needing the lightfm package at serving time.
@@ -31,11 +38,16 @@ import numpy as np
 import pandas as pd
 
 from pipeline.config import Paths
+from src.models.lightfm_model import build_item_feature_tags, collect_unique_feature_tags
 
 
 # ---------------------------------------------------------------------------
 # Language preference derivation
 # ---------------------------------------------------------------------------
+
+# Only recognize these 4 language codes (aligned with build_top5000_members_with_language.py)
+# 3=Chinese(Mandarin), 52=English, 17=Japanese, 31=Korean
+LANGUAGE_MAP = {3: "Chinese", 52: "English", 17: "Japanese", 31: "Korean"}
 
 # Minimum ratio of a language in user's positive interactions to be considered
 # a language preference tag.
@@ -52,13 +64,15 @@ def derive_user_lang_prefs(
     For each user, if a language accounts for ≥ threshold of their
     positive interactions, they get a `lang_pref_{code}` tag.
 
+    Only considers songs with language codes in LANGUAGE_MAP (3, 17, 31, 52).
+
     Returns {msno_id: [lang_pref_3, lang_pref_52, ...]}
     """
     # Map each positive interaction to its song language
     pos_with_lang = positives.copy()
     pos_with_lang["language"] = pos_with_lang["song_id"].map(song_lang_map)
-    # Drop rows with unknown language (-1)
-    pos_with_lang = pos_with_lang[pos_with_lang["language"] != -1]
+    # Only keep songs with recognized language codes
+    pos_with_lang = pos_with_lang[pos_with_lang["language"].isin(LANGUAGE_MAP.keys())]
 
     # Count interactions per user per language
     lang_counts = (
@@ -117,12 +131,12 @@ def build_user_feature_tags(
     return features
 
 
-# Known language codes in KKBOX dataset
-# 3=Chinese(Mandarin), 24=Cantonese, 52=English, 17=Japanese, 31=Korean
-KNOWN_LANG_CODES = [3, 10, 17, 24, 31, 45, 52, 59]
+# Recognized language codes for user language preference tags
+# 3=Chinese(Mandarin), 17=Japanese, 31=Korean, 52=English
+KNOWN_LANG_PREF_CODES = [3, 17, 31, 52]
 
 
-def get_all_feature_names() -> list[str]:
+def get_all_user_feature_names() -> list[str]:
     """All possible user feature tag names (must match backend encoding)."""
     names = []
     for i in range(7):
@@ -131,16 +145,9 @@ def get_all_feature_names() -> list[str]:
     for i in range(7):
         names.append(f"ms_{i}")
     # Language preference tags
-    for code in KNOWN_LANG_CODES:
+    for code in KNOWN_LANG_PREF_CODES:
         names.append(f"lang_pref_{code}")
-    names.append("lang_pref_-1")
     return names
-
-
-def get_all_item_feature_names(song_lang_map: dict[int, int]) -> list[str]:
-    """All unique item (song) feature tag names."""
-    codes = set(song_lang_map.values())
-    return sorted([f"lang_{code}" for code in codes])
 
 
 # ---------------------------------------------------------------------------
@@ -156,78 +163,70 @@ def load_positive_interactions(train_path: Path) -> pd.DataFrame:
     return positives
 
 
-def load_song_language(song_merge_path: Path, all_song_ids: list[int]) -> dict[int, int]:
-    """Load song language mapping from song_merge.parquet.
+def load_song_metadata(
+    song_merge_path: Path, all_song_ids: list[int]
+) -> pd.DataFrame:
+    """Load song metadata from song_merge.parquet for item feature construction.
 
-    Returns {song_id_new: language_code} (int). Missing/NaN → -1.
+    Returns a DataFrame with columns: song_id_new, language, artist_name,
+    song_length, genre_ids — filtered to songs present in the training set.
     """
-    songs = pd.read_parquet(song_merge_path, columns=["song_id_new", "language"])
-    songs["language"] = songs["language"].fillna(-1).astype(int)
-    # Only keep songs in our training set
+    cols = ["song_id_new", "language", "artist_name", "song_length", "genre_ids"]
+    songs = pd.read_parquet(song_merge_path, columns=cols)
     songs = songs[songs["song_id_new"].isin(set(all_song_ids))]
-    song_lang_map = dict(zip(songs["song_id_new"], songs["language"]))
-    # Fill missing songs with -1
-    for sid in all_song_ids:
-        if sid not in song_lang_map:
-            song_lang_map[sid] = -1
-    print(f"  Song language map loaded: {len(song_lang_map):,} songs")
-    lang_dist = pd.Series(song_lang_map).value_counts().head(10)
+    # Fill NaN for language (needed by derive_user_lang_prefs)
+    songs["language"] = songs["language"].fillna(-1).astype(int)
+    print(f"  Song metadata loaded: {len(songs):,} songs")
+    print(f"  Columns: {list(songs.columns)}")
+    lang_dist = songs["language"].value_counts().head(10)
     print(f"  Top language codes:\n{lang_dist.to_string()}")
-    return song_lang_map
+    return songs
 
 
 def train_purecf(
     positives: pd.DataFrame,
     all_user_ids: list[int],
     all_song_ids: list[int],
-    item_feature_tags: dict[int, list[str]],
-    all_item_feature_names: list[str],
     *,
     no_components: int,
     epochs: int,
     loss: str,
     learning_rate: float,
+    max_sampled: int,
+    item_alpha: float,
+    user_alpha: float,
     num_threads: int,
     seed: int,
 ):
-    """Train pure CF LightFM with item features (no user features)."""
+    """Train pure CF LightFM (no user/item features, identity-only MF)."""
     from lightfm import LightFM
     from lightfm.data import Dataset
 
-    print("\n[Pure CF] Building dataset ...")
+    print("\n[Pure CF] Building dataset (identity-only, no features) ...")
     dataset = Dataset()
-    dataset.fit(
-        users=all_user_ids,
-        items=all_song_ids,
-        item_features=all_item_feature_names,
-    )
+    dataset.fit(users=all_user_ids, items=all_song_ids)
 
     interactions, _ = dataset.build_interactions(
         zip(positives["msno_id"].tolist(), positives["song_id"].tolist())
     )
 
-    # Build item features matrix
-    item_features_iter = [
-        (sid, item_feature_tags.get(sid, []))
-        for sid in all_song_ids
-    ]
-    item_features = dataset.build_item_features(item_features_iter, normalize=False)
-
     print(f"  Interactions matrix: {dataset.interactions_shape()}")
-    print(f"  Item features shape: {item_features.shape}")
 
     print(f"[Pure CF] Training (components={no_components}, epochs={epochs}, "
-          f"loss={loss}) ...")
+          f"loss={loss}, max_sampled={max_sampled}, "
+          f"item_alpha={item_alpha}, user_alpha={user_alpha}) ...")
     t0 = time.time()
     model = LightFM(
         no_components=no_components,
         loss=loss,
         learning_rate=learning_rate,
+        max_sampled=max_sampled,
+        item_alpha=item_alpha,
+        user_alpha=user_alpha,
         random_state=seed,
     )
     model.fit(
         interactions,
-        item_features=item_features,
         epochs=epochs,
         num_threads=num_threads,
         verbose=True,
@@ -250,6 +249,9 @@ def train_hybrid(
     epochs: int,
     loss: str,
     learning_rate: float,
+    max_sampled: int,
+    item_alpha: float,
+    user_alpha: float,
     num_threads: int,
     seed: int,
 ):
@@ -293,12 +295,16 @@ def train_hybrid(
     print(f"  Item features shape: {item_features.shape}")
 
     print(f"[Hybrid] Training (components={no_components}, epochs={epochs}, "
-          f"loss={loss}) ...")
+          f"loss={loss}, max_sampled={max_sampled}, "
+          f"item_alpha={item_alpha}, user_alpha={user_alpha}) ...")
     t0 = time.time()
     model = LightFM(
         no_components=no_components,
         loss=loss,
         learning_rate=learning_rate,
+        max_sampled=max_sampled,
+        item_alpha=item_alpha,
+        user_alpha=user_alpha,
         random_state=seed,
     )
     model.fit(
@@ -372,13 +378,24 @@ def export_purecf_npz(
     model,
     dataset,
     all_song_ids: list[int],
-    item_feature_tags: dict[int, list[str]],
     output: Path,
 ) -> None:
-    """Export pure CF artifacts to .npz (with full item representations)."""
-    song_ids_list, embeddings, biases = _compute_full_item_representations(
-        model, dataset, all_song_ids, item_feature_tags
-    )
+    """Export pure CF artifacts to .npz (raw item latent vectors, no features)."""
+    item_id_mapping = dataset._item_id_mapping
+
+    song_ids_list = []
+    embeddings_list = []
+    biases_list = []
+    for song_id in all_song_ids:
+        if song_id not in item_id_mapping:
+            continue
+        idx = item_id_mapping[song_id]
+        song_ids_list.append(song_id)
+        embeddings_list.append(model.item_embeddings[idx])
+        biases_list.append(float(model.item_biases[idx]))
+
+    embeddings = np.array(embeddings_list, dtype=np.float32)
+    biases = np.array(biases_list, dtype=np.float32)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
@@ -462,7 +479,7 @@ def main() -> int:
     parser.add_argument(
         "--songs-path", type=Path,
         default=paths.interim / "song_merge.parquet",
-        help="Song metadata with language field",
+        help="Song metadata for hybrid item features (not needed for purecf-only)",
     )
     parser.add_argument(
         "--output-purecf", type=Path,
@@ -472,16 +489,53 @@ def main() -> int:
         "--output-hybrid", type=Path,
         default=paths.artifacts / "lightfm_hybrid.npz",
     )
-    parser.add_argument("--no-components", type=int, default=128)
-    parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--loss", type=str, default="warp")
-    parser.add_argument("--learning-rate", type=float, default=0.05)
+
+    # --- Shared parameters ---
+    parser.add_argument("--loss", type=str, default="warp",
+                        choices=["warp", "bpr", "logistic", "warp-kos"])
     parser.add_argument("--num-threads", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--lang-pref-threshold", type=float, default=LANG_PREF_RATIO_THRESHOLD,
         help="Min ratio for a language to be tagged as user preference",
     )
+    parser.add_argument(
+        "--top-k-artists", type=int, default=5000,
+        help="[Hybrid] Top-K artists to keep as individual tags (rest → artist_other)",
+    )
+    parser.add_argument(
+        "--length-buckets", type=int, default=5,
+        help="[Hybrid] Number of quantile buckets for song length",
+    )
+
+    # --- Pure CF model hyperparameters ---
+    purecf_group = parser.add_argument_group("Pure CF hyperparameters")
+    purecf_group.add_argument("--purecf-components", type=int, default=256,
+                              help="Embedding dimension for pure CF (default: 256)")
+    purecf_group.add_argument("--purecf-epochs", type=int, default=50)
+    purecf_group.add_argument("--purecf-lr", type=float, default=0.05,
+                              help="Learning rate for pure CF")
+    purecf_group.add_argument("--purecf-max-sampled", type=int, default=80,
+                              help="WARP max negative samples for pure CF")
+    purecf_group.add_argument("--purecf-item-alpha", type=float, default=1e-6,
+                              help="L2 regularization on item latent vectors (pure CF)")
+    purecf_group.add_argument("--purecf-user-alpha", type=float, default=1e-5,
+                              help="L2 regularization on user latent vectors (pure CF)")
+
+    # --- Hybrid model hyperparameters ---
+    hybrid_group = parser.add_argument_group("Hybrid hyperparameters")
+    hybrid_group.add_argument("--hybrid-components", type=int, default=128,
+                              help="Embedding dimension for hybrid (default: 128)")
+    hybrid_group.add_argument("--hybrid-epochs", type=int, default=30)
+    hybrid_group.add_argument("--hybrid-lr", type=float, default=0.05,
+                              help="Learning rate for hybrid")
+    hybrid_group.add_argument("--hybrid-max-sampled", type=int, default=50,
+                              help="WARP max negative samples for hybrid")
+    hybrid_group.add_argument("--hybrid-item-alpha", type=float, default=0.0,
+                              help="L2 regularization on item embeddings (hybrid)")
+    hybrid_group.add_argument("--hybrid-user-alpha", type=float, default=0.0,
+                              help="L2 regularization on user embeddings (hybrid)")
+
     args = parser.parse_args()
 
     # --- Validate ---
@@ -504,40 +558,24 @@ def main() -> int:
     all_song_ids = sorted(positives["song_id"].unique().tolist())
     print(f"  Users: {len(all_user_ids):,}, Songs: {len(all_song_ids):,}")
 
-    # --- Load song language data ---
-    if not args.songs_path.exists():
-        raise SystemExit(
-            f"[stage_db02] Song metadata not found: {args.songs_path}\n"
-            f"Need song_merge.parquet for language item features."
-        )
-    print(f"\n[stage_db02] Loading song language from {args.songs_path} ...")
-    song_lang_map = load_song_language(args.songs_path, all_song_ids)
-
-    # Build item feature tags (language)
-    item_feature_tags = {
-        sid: [f"lang_{song_lang_map.get(sid, -1)}"]
-        for sid in all_song_ids
-    }
-    all_item_feature_names = get_all_item_feature_names(song_lang_map)
-    print(f"  Item feature names: {all_item_feature_names}")
-
-    train_kwargs = dict(
-        no_components=args.no_components,
-        epochs=args.epochs,
-        loss=args.loss,
-        learning_rate=args.learning_rate,
-        num_threads=args.num_threads,
-        seed=args.seed,
-    )
-
-    # --- Pure CF (with item features) ---
+    # --- Pure CF (no features, identity-only MF) ---
     if args.mode in ("both", "purecf"):
+        purecf_kwargs = dict(
+            no_components=args.purecf_components,
+            epochs=args.purecf_epochs,
+            loss=args.loss,
+            learning_rate=args.purecf_lr,
+            max_sampled=args.purecf_max_sampled,
+            item_alpha=args.purecf_item_alpha,
+            user_alpha=args.purecf_user_alpha,
+            num_threads=args.num_threads,
+            seed=args.seed,
+        )
         model, dataset = train_purecf(
             positives, all_user_ids, all_song_ids,
-            item_feature_tags, all_item_feature_names,
-            **train_kwargs,
+            **purecf_kwargs,
         )
-        export_purecf_npz(model, dataset, all_song_ids, item_feature_tags, args.output_purecf)
+        export_purecf_npz(model, dataset, all_song_ids, args.output_purecf)
         del model, dataset
 
     # --- Hybrid (user features + item features) ---
@@ -547,7 +585,38 @@ def main() -> int:
                 f"[stage_db02] Members file not found: {args.members_path}\n"
                 f"Need member features for hybrid mode."
             )
+        if not args.songs_path.exists():
+            raise SystemExit(
+                f"[stage_db02] Song metadata not found: {args.songs_path}\n"
+                f"Need song_merge.parquet for hybrid item features."
+            )
 
+        # Load song metadata (for item features + lang_pref derivation)
+        print(f"\n[Hybrid] Loading song metadata from {args.songs_path} ...")
+        songs_df = load_song_metadata(args.songs_path, all_song_ids)
+
+        # Build song_lang_map for derive_user_lang_prefs
+        song_lang_map = dict(zip(
+            songs_df["song_id_new"].astype(int),
+            songs_df["language"].astype(int),
+        ))
+        for sid in all_song_ids:
+            if sid not in song_lang_map:
+                song_lang_map[sid] = -1
+
+        # Build item feature tags (artist + language + length + genre)
+        item_feature_tags = build_item_feature_tags(
+            songs_df, top_k_artists=args.top_k_artists, length_buckets=args.length_buckets
+        )
+        for sid in all_song_ids:
+            if sid not in item_feature_tags:
+                item_feature_tags[sid] = ["lang_-1", "artist_other", "len_0", "genre_unknown"]
+
+        all_item_feature_names = collect_unique_feature_tags(item_feature_tags)
+        print(f"  Item feature tags: {len(all_item_feature_names):,} unique tags")
+        print(f"  Sample tags: {all_item_feature_names[:10]} ...")
+
+        # Load members
         print(f"\n[Hybrid] Loading members from {args.members_path} ...")
         members = pd.read_parquet(args.members_path)
         members = members[members["msno_id"].isin(set(all_user_ids))]
@@ -560,15 +629,26 @@ def main() -> int:
         )
 
         user_feature_tags = build_user_feature_tags(members, user_lang_prefs)
-        all_user_feature_names = get_all_feature_names()
+        all_user_feature_names = get_all_user_feature_names()
         print(f"  All user feature names ({len(all_user_feature_names)}): "
               f"{all_user_feature_names}")
 
+        hybrid_kwargs = dict(
+            no_components=args.hybrid_components,
+            epochs=args.hybrid_epochs,
+            loss=args.loss,
+            learning_rate=args.hybrid_lr,
+            max_sampled=args.hybrid_max_sampled,
+            item_alpha=args.hybrid_item_alpha,
+            user_alpha=args.hybrid_user_alpha,
+            num_threads=args.num_threads,
+            seed=args.seed,
+        )
         model, dataset = train_hybrid(
             positives, all_user_ids, all_song_ids,
             user_feature_tags, all_user_feature_names,
             item_feature_tags, all_item_feature_names,
-            **train_kwargs,
+            **hybrid_kwargs,
         )
         export_hybrid_npz(
             model, dataset, all_song_ids, all_user_feature_names,
