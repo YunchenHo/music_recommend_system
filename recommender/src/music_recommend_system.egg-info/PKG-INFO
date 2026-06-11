@@ -1,0 +1,20 @@
+Metadata-Version: 2.4
+Name: music-recommend-system
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: <3.14,>=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: faiss-cpu>=1.13.2
+Requires-Dist: gdown>=5.2.1
+Requires-Dist: ipykernel>=7.1.0
+Requires-Dist: matplotlib>=3.10.8
+Requires-Dist: pandas>=3.0.0
+Requires-Dist: pyarrow>=16.0.0
+Requires-Dist: requests>=2.32.0
+Requires-Dist: scikit-learn>=1.8.0
+Requires-Dist: scipy>=1.17.0
+Requires-Dist: seaborn>=0.13.2
+Requires-Dist: tensorflow<2.19,>=2.18
+Requires-Dist: tqdm>=4.67.1
+Provides-Extra: metal
+Requires-Dist: tensorflow-metal==1.1.*; extra == "metal"
