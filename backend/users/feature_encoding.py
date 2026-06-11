@@ -20,9 +20,9 @@ from django.utils import timezone
 
 
 # KKBOX language codes mapping from app language names
-# 3=Chinese(Mandarin), 24=Cantonese, 52=English, 17=Japanese, 31=Korean
+# 3=Chinese(Mandarin), 52=English, 17=Japanese, 31=Korean
 APP_LANG_TO_KKBOX_CODE: dict[str, list[int]] = {
-    'Chinese': [3, 24],   # 國語 + 粵語
+    'Chinese': [3],
     'English': [52],
     'Japanese': [17],
     'Korean': [31],
@@ -111,8 +111,7 @@ def get_all_feature_names() -> list[str]:
     names.extend(["gender_female", "gender_male", "gender_unknown"])
     for i in range(7):
         names.append(f"ms_{i}")
-    # Language preference tags (known KKBOX codes)
-    for code in [3, 10, 17, 24, 31, 45, 52, 59]:
+    # Language preference tags (aligned with training: only 4 recognized codes)
+    for code in [3, 17, 31, 52]:
         names.append(f"lang_pref_{code}")
-    names.append("lang_pref_-1")
     return names
