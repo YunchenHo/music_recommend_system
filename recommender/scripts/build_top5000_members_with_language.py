@@ -2,8 +2,10 @@ from pathlib import Path
 import pandas as pd
 
 SCRIPT_DIR = Path(__file__).parent          # recommender/scripts/
-RECOMMENDER_DIR = SCRIPT_DIR.parent         # recommender/ = /app in container
-DATA_DIR = RECOMMENDER_DIR.parent / "data" / "processed"   # /data/processed
+RECOMMENDER_DIR = SCRIPT_DIR.parent         # recommender/
+PROJECT_DIR = RECOMMENDER_DIR.parent        # music_recommend_system/
+
+DATA_DIR = PROJECT_DIR / "data" / "processed"
 ARTIFACTS_DIR = RECOMMENDER_DIR / "artifacts"
 
 # =========================
@@ -123,7 +125,7 @@ for msno_id in top5000["msno_id"]:
                 preferred = ",".join(selected)
 
             else:
-                preferred = "Mixed"
+                preferred = "Chinese,English,Japanese,Korean"
 
     language_rows.append({
         "msno_id": msno_id,
