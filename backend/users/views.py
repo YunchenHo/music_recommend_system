@@ -310,13 +310,6 @@ class OnboardingSubmitView(APIView):
             for song in existing_songs
         ])
 
-        try:
-            # NOTE: ItemKNN pre-computation kept for potential future use.
-            # LightFM hybrid is now used for cold-start recommendations.
-            onboarding_itemknn_store.refresh_stored_itemknn_recommendations(user)
-        except (FileNotFoundError, ValueError, Exception):
-            pass  # Non-critical; LightFM hybrid doesn't depend on this
-
         return Response({
             "status": "success",
             "message": "Onboarding complete.",
@@ -412,7 +405,7 @@ class RecommendationsView(APIView):
                 history_song_ids=history_song_ids,
                 exclude_song_ids=exclude,
                 affinity_map=affinity_map,
-                top_n=20,
+                top_n=200,
             )
         except Exception as exc:
             logger.warning("PureCF recommend failed: %s", exc)
@@ -430,7 +423,7 @@ class RecommendationsView(APIView):
                 user=user,
                 onboarding_song_ids=onboarding_song_ids,
                 exclude_song_ids=exclude,
-                top_n=20,
+                top_n=200,
             )
         except Exception as exc:
             logger.warning("Hybrid recommend failed: %s", exc)
@@ -488,12 +481,17 @@ class RecommendationsView(APIView):
         penalty = settings.LANGUAGE_PENALTY_FACTOR
 
         if preferred_lang_codes:
+            # LightFM 分數可能為負，直接乘 penalty 會讓負數變「不那麼負」（排名反升）。
+            # 先平移到全正數再乘，確保 penalty 永遠讓非偏好語言排名下降。
+            valid_scores = [scores[i] for i, sid in enumerate(rec_ids) if sid in song_map and i < len(scores)]
+            offset = max(0.0, -min(valid_scores) + 1.0) if valid_scores else 0.0
+
             adjusted = []
             for i, sid in enumerate(rec_ids):
                 if sid not in song_map:
                     continue
-                score = scores[i] if i < len(scores) else 0.0
-                song_lang = song_map[sid].language or ''
+                score = (scores[i] if i < len(scores) else 0.0) + offset
+                song_lang = (song_map[sid].language or '').strip()
                 if song_lang not in preferred_lang_codes:
                     score *= penalty
                 adjusted.append((sid, score))
