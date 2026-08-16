@@ -43,6 +43,7 @@ recommender/artifacts/*.h5
 .env
 node_modules/
 .claude
+docker-compose.override.yml
 
 # macOS
 .DS_Store
