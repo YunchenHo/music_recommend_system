@@ -54,6 +54,8 @@ def main() -> int:
         paths.raw / "song_extra_info.csv",
         paths.interim / "song_merge.parquet",
         paths.artifacts / "song_encoder.pkl",
+        paths.artifacts / "artist_id_map.csv",
+        paths.artifacts / "song_for_db.csv",
         raw_dir=paths.raw,
     )
 
